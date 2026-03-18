@@ -1,0 +1,54 @@
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700;900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* LIGHT MODE (Default Variables) */
+  :root {
+    --bg-main: #F3F4F6;         /* Light Gray Background */
+    --bg-panel: #FFFFFF;        /* White cards/sidebar */
+    --bg-panel-alt: #F8FAFC;    /* Slight offset white */
+    --border-color: #E5E7EB;    /* Light border border-gray-200 */
+    --text-primary: #111827;    /* Dark gray text */
+    --text-secondary: #6B7280;  /* Muted text */
+    --accent-blue: #3B82F6;     /* Bright Blue */
+    --card-shadow: 0px 2px 4px rgba(0, 0, 0, 0.05);
+  }
+
+  /* DARK MODE Variables */
+  .dark {
+    --bg-main: #020617;         /* Very Dark Blue/Black */
+    --bg-panel: #0F1629;        /* Dark Sidebar/Navbar */
+    --bg-panel-alt: #1C253D;    /* Lighter Dark for Cards */
+    --border-color: #1E293B;    /* Dark borders */
+    --text-primary: #F3F4F6;    /* Light text */
+    --text-secondary: #71829B;  /* Muted light text */
+    --card-shadow: none;
+  }
+
+  body {
+    background-color: var(--bg-main);
+    color: var(--text-primary);
+    font-family: 'Roboto', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    transition: background-color 0.3s ease, color 0.3s ease;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background-color: var(--border-color);
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--text-secondary);
+}

@@ -1,0 +1,7 @@
+# Ignore everything except the mobile app to prevent symlink errors on Windows
+backend/
+frontend/
+node_modules/
+backend.zip
+scripts/
+.git/

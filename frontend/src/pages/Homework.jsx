@@ -193,7 +193,7 @@ const ViewHomeworkModal = ({ isOpen, onClose, data }) => {
           </div>
           <div className="border-t border-gray-100 dark:border-[#334155] pt-4">
             <p className="text-[10px] font-bold text-[#64748b] tracking-widest uppercase mb-2">Topic / Description</p>
-            <p className="text-[12px] font-bold text-[var(--text-primary)] leading-relaxed">{data.topic}</p>
+            <p className="text-[12px] font-bold text-[var(--text-primary)] leading-relaxed break-words whitespace-pre-wrap">{data.topic}</p>
           </div>
         </div>
         <div className="px-6 pb-5 flex justify-end bg-white dark:bg-[#1a2234] border-t border-gray-200 dark:border-[#334155] pt-4">

@@ -99,8 +99,24 @@ const ViewStudentModal = ({ isOpen, onClose, data }) => {
                    <span className="font-bold text-[#3b82f6]">{student.phone || student.contactNo || student.contact_no || '-'}</span>
                 </div>
                 <div className="flex justify-between py-1.5 border-b border-gray-200 dark:border-[#334155] transition-colors">
+                   <span className="font-bold text-[#64748b] tracking-widest">PARENT EMAIL</span>
+                   <span className="font-bold text-[#ef4444]">{student.parent_email || '-'}</span>
+                </div>
+                <div className="flex justify-between py-1.5 border-b border-gray-200 dark:border-[#334155] transition-colors">
+                   <span className="font-bold text-[#64748b] tracking-widest">FATHER'S QUAL</span>
+                   <span className="font-bold text-[var(--text-primary)] uppercase transition-colors">{student.qualification_father || '-'}</span>
+                </div>
+                <div className="flex justify-between py-1.5 border-b border-gray-200 dark:border-[#334155] transition-colors">
+                   <span className="font-bold text-[#64748b] tracking-widest">MOTHER'S QUAL</span>
+                   <span className="font-bold text-[var(--text-primary)] uppercase transition-colors">{student.qualification_mother || '-'}</span>
+                </div>
+                <div className="flex justify-between py-1.5 border-b border-gray-200 dark:border-[#334155] transition-colors">
                    <span className="font-bold text-[#64748b] tracking-widest">DATE OF BIRTH</span>
                    <span className="font-bold text-[var(--text-primary)] transition-colors">{student.date_of_birth || student.dob || '-'}</span>
+                </div>
+                <div className="flex justify-between py-1.5 border-b border-gray-200 dark:border-[#334155] transition-colors">
+                   <span className="font-bold text-[#64748b] tracking-widest">SECTION</span>
+                   <span className="font-bold text-[var(--text-primary)] uppercase transition-colors">{student.section || '-'}</span>
                 </div>
              </div>
 
@@ -121,6 +137,10 @@ const ViewStudentModal = ({ isOpen, onClose, data }) => {
                 <div className="flex justify-between py-1.5 border-b border-gray-200 dark:border-[#334155] transition-colors">
                    <span className="font-bold text-[#64748b] tracking-widest">NATIONALITY</span>
                    <span className="font-bold text-[var(--text-primary)] uppercase transition-colors">{student.nationality || 'INDIAN'}</span>
+                </div>
+                <div className="flex justify-between py-1.5 border-b border-gray-200 dark:border-[#334155] transition-colors">
+                   <span className="font-bold text-[#64748b] tracking-widest">ROLL NUMBER</span>
+                   <span className="font-bold text-[var(--text-primary)] uppercase transition-colors">{student.roll_no || student.roll || '-'}</span>
                 </div>
              </div>
           </div>

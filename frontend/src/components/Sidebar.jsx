@@ -76,6 +76,7 @@ const Sidebar = () => {
             <SidebarItem icon={FileText} label="Exams & Results" active={location.pathname === '/admin/exams'} onClick={() => navigate('/admin/exams')} />
             <SidebarItem icon={Calendar} label="Timetable" active={location.pathname === '/admin/timetable'} onClick={() => navigate('/admin/timetable')} />
             <SidebarItem icon={CheckSquare} label="Attendance" active={location.pathname === '/admin/attendance'} onClick={() => navigate('/admin/attendance')} />
+            <SidebarItem icon={Box} label="Student Leaves" active={location.pathname === '/admin/leaves'} onClick={() => navigate('/admin/leaves')} />
           </div>
         </div>
 

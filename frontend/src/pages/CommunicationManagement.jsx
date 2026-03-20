@@ -3,7 +3,7 @@ import {
   MessageSquare, Mail, Smartphone, Bell, Search, Plus, Download,
   Edit, Trash2, Send, Users, CheckCircle2, Clock, AlertCircle,
   FileText, ChevronLeft, ChevronRight, TrendingUp, X, CreditCard,
-  History, RefreshCw, Loader2
+  History, RefreshCw, Loader2, Eye
 } from 'lucide-react';
 import api from '../api/axios';
 
@@ -20,6 +20,14 @@ const CommunicationManagement = () => {
   // Modal states
   const [activeModal, setActiveModal] = useState(null);
   const [editItem, setEditItem] = useState(null);
+  const [viewItem, setViewItem] = useState(null);
+
+  const truncateWords = (text, limit = 8) => {
+    if (!text) return '';
+    const words = text.split(/\s+/);
+    if (words.length <= limit) return text;
+    return words.slice(0, limit).join(' ') + '...';
+  };
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -34,6 +42,7 @@ const CommunicationManagement = () => {
           id: n.notice_id ?? `NOT-${n.id}`,
           rawId: n.id,
           title: n.title ?? 'N/A',
+          content: n.content ?? '',
           publishedBy: n.published_by ?? n.author ?? 'Admin',
           date: n.publish_date ? n.publish_date.split('T')[0] : (n.created_at ? n.created_at.split('T')[0] : 'N/A'),
           status: n.status ?? 'Active',
@@ -47,9 +56,10 @@ const CommunicationManagement = () => {
           id: m.message_id ?? `MSG-${m.id}`,
           rawId: m.id,
           subject: m.subject ?? m.title ?? 'N/A',
-          audience: m.audience ?? m.recipient_group ?? 'All',
+          content: m.message ?? m.content ?? '',
+          audience: m.recipient_login_id === 'BROADCAST' ? 'ALL PARENTS' : `ID: ${m.recipient_login_id}`,
           type: m.type ?? m.channel ?? 'SMS',
-          date: m.sent_at ? m.sent_at.split('T')[0] : 'N/A',
+          date: m.created_at ? m.created_at.split('T')[0] : 'N/A',
           status: m.status ?? 'Delivered',
           count: m.recipient_count ?? m.count ?? 0,
         }));
@@ -75,9 +85,22 @@ const CommunicationManagement = () => {
     if (!window.confirm(`Delete notice ${displayId}?`)) return;
     try {
       await api.delete(`/notices/${rawId}`);
+      // Also delete from parent notifications table if it was broadcasted
+      await api.delete(`/parent-notifications/notice/${rawId}`); 
       setNotices(prev => prev.filter(n => n.rawId !== rawId));
     } catch {
-      setNotices(prev => prev.filter(n => n.rawId !== rawId)); // optimistic
+      setNotices(prev => prev.filter(n => n.rawId !== rawId));
+    }
+  };
+
+  const handleDeleteMessage = async (rawId, displayId) => {
+    if (!window.confirm(`Delete sent message ${displayId}?`)) return;
+    try {
+      // Delete from notifications table
+      await api.delete(`/parent-notifications/${rawId}`);
+      setMessages(prev => prev.filter(m => m.rawId !== rawId));
+    } catch {
+       setMessages(prev => prev.filter(m => m.rawId !== rawId));
     }
   };
 
@@ -106,10 +129,41 @@ const CommunicationManagement = () => {
       {/* Content Area with Tabs */}
       <div className="flex-1 flex flex-col bg-[var(--bg-panel-alt)] border border-[var(--border-color)] dark:border-white/5 rounded-xl shadow-2xl overflow-hidden transition-all">
         
-        {/* Tab Bar */}
-        <div className="flex items-center px-4 pt-1 bg-gray-50 dark:bg-[#171e2e] border-b border-[var(--border-color)] dark:border-white/5 shrink-0">
-          <TabItem active={activeTab === 'NoticeBoard'} label="NOTICE BOARD" icon={Bell} onClick={() => setActiveTab('NoticeBoard')} />
-          <TabItem active={activeTab === 'ParentComm'} label="SEND TO PARENTS" icon={Smartphone} onClick={() => setActiveTab('ParentComm')} />
+        {/* Unified Tab Bar & Toolbar */}
+        <div className="flex items-center justify-between px-4 bg-gray-50 dark:bg-[#171e2e] border-b border-[var(--border-color)] dark:border-white/5 shrink-0 overflow-x-auto custom-scrollbar-h">
+          <div className="flex items-center pt-1 shrink-0">
+            <TabItem active={activeTab === 'NoticeBoard'} label="NOTICE BOARD" icon={Bell} onClick={() => setActiveTab('NoticeBoard')} />
+            <TabItem active={activeTab === 'ParentComm'} label="SEND TO PARENTS" icon={Smartphone} onClick={() => setActiveTab('ParentComm')} />
+          </div>
+
+          <div className="flex items-center space-x-4 py-2 shrink-0">
+             <div className="relative group">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-[#6366f1] transition-colors" strokeWidth={3} />
+                <input 
+                  type="text" 
+                  placeholder={
+                    activeTab === 'NoticeBoard' ? "Search Notice Title..." : "Search Sent Messages..."
+                  }
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  className="w-[280px] h-9 pl-9 pr-4 bg-white dark:bg-[#111827] border border-[var(--border-color)] dark:border-white/10 rounded-lg text-[11px] font-bold text-[var(--text-primary)] placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:outline-none focus:border-[#6366f1]/50 transition-all shadow-inner" 
+                />
+             </div>
+             <div className="flex items-center space-x-2">
+                {activeTab === 'NoticeBoard' && (
+                  <button onClick={() => setActiveModal('notice')} className="flex items-center space-x-2 px-5 h-9 rounded-lg bg-[#f59e0b] text-white text-[11px] font-black shadow-lg shadow-amber-500/20 transition-all hover:bg-amber-600">
+                    <Plus size={14} strokeWidth={3} />
+                    <span>Post New Notice</span>
+                  </button>
+                )}
+                {activeTab === 'ParentComm' && (
+                  <button onClick={() => setActiveModal('compose')} className="flex items-center space-x-2 px-5 h-9 rounded-lg bg-[#6366f1] text-white text-[11px] font-black shadow-lg shadow-indigo-500/20 transition-all hover:bg-indigo-600">
+                    <Send size={14} strokeWidth={3} />
+                    <span>Send Message to Parents</span>
+                  </button>
+                )}
+             </div>
+          </div>
         </div>
 
           <div className="flex-1 flex flex-col min-h-0 bg-white dark:bg-[#0f172a] relative">
@@ -121,82 +175,129 @@ const CommunicationManagement = () => {
                 </div>
               </div>
             )}
-            {/* Sub Toolbar */}
-          <div className="px-6 py-3 flex items-center justify-between border-b border-[var(--border-color)] dark:border-white/5 shrink-0">
-             <div className="relative group">
-                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-[#6366f1] transition-colors" strokeWidth={3} />
-                <input 
-                  type="text" 
-                  placeholder={
-                    activeTab === 'NoticeBoard' ? "Search Notice Title..." : "Search Contacts..."
-                  }
-                  value={search}
-                  onChange={e => setSearch(e.target.value)}
-                  className="w-[320px] h-9 pl-9 pr-4 bg-white dark:bg-[#111827] border border-[var(--border-color)] dark:border-white/10 rounded-lg text-[11px] font-bold text-[var(--text-primary)] placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:outline-none focus:border-[#6366f1]/50 transition-all shadow-inner" 
-                />
-             </div>
-             <div className="flex items-center space-x-3">
-                {activeTab === 'NoticeBoard' && (
-                  <button onClick={() => setActiveModal('notice')} className="flex items-center space-x-2 px-6 h-9 rounded-lg bg-[#f59e0b] text-white text-[11px] font-black shadow-lg shadow-amber-500/20 transition-all hover:bg-amber-600">
-                    <Plus size={14} strokeWidth={3} />
-                    <span>Post New Notice</span>
-                  </button>
-                )}
-                {activeTab === 'ParentComm' && (
-                  <button onClick={() => setActiveModal('compose')} className="flex items-center space-x-2 px-6 h-9 rounded-lg bg-[#6366f1] text-white text-[11px] font-black shadow-lg shadow-indigo-500/20 transition-all hover:bg-indigo-600">
-                    <Send size={14} strokeWidth={3} />
-                    <span>Send Message to Parents</span>
-                  </button>
-                )}
-             </div>
-          </div>
 
           {/* Body Content */}
           <div className="flex-1 overflow-auto custom-scrollbar p-0">
             {activeTab === 'ParentComm' && (
-              <div className="p-12 flex flex-col items-center justify-center space-y-4 opacity-70">
-                 <div className="w-16 h-16 rounded-full bg-indigo-500/10 flex items-center justify-center text-indigo-500">
-                    <Users size={32} />
-                 </div>
-                 <div className="text-center">
-                    <h4 className="text-[14px] font-black text-[var(--text-primary)] uppercase">Parent Communication</h4>
-                    <p className="text-[10px] font-bold text-slate-500 uppercase mt-1">Use the 'Send Message' button above to reach parents directly.</p>
-                 </div>
+              <div className="flex-1 overflow-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-gray-100 dark:border-white/5 sticky top-0 bg-white dark:bg-[#0f172a] z-10">
+                      <th className="py-4 px-6 text-[10px] font-black text-slate-500 uppercase tracking-widest whitespace-nowrap">Message Details</th>
+                      <th className="py-4 px-6 text-[10px] font-black text-slate-500 uppercase tracking-widest whitespace-nowrap">Message Content</th>
+                      <th className="py-4 px-6 text-[10px] font-black text-slate-500 uppercase tracking-widest whitespace-nowrap">Audience</th>
+                      <th className="py-4 px-6 text-[10px] font-black text-slate-500 uppercase tracking-widest whitespace-nowrap text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredMessages.map(msg => (
+                      <tr key={msg.id} className="border-b border-gray-50 dark:border-white/[0.02] hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors">
+                        <td className="py-4 px-6">
+                           <div className="flex items-center space-x-3">
+                              <div className="w-8 h-8 rounded-lg bg-indigo-500/10 text-indigo-500 flex items-center justify-center border border-indigo-500/20">
+                                 <Mail size={14} />
+                              </div>
+                              <div>
+                                 <p className="text-[11px] font-black text-[var(--text-primary)] uppercase leading-none mb-1">{msg.subject}</p>
+                                 <p className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.05em]">ID: {msg.id}</p>
+                              </div>
+                           </div>
+                        </td>
+                        <td className="py-4 px-6">
+                           <div className="max-w-[200px]">
+                              <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 leading-tight">
+                                 {truncateWords(msg.content)}
+                              </p>
+                           </div>
+                        </td>
+                        <td className="py-4 px-6">
+                           <div className="flex flex-col">
+                              <span className="px-2 py-0.5 bg-slate-500/10 text-slate-500 dark:text-slate-400 border border-slate-500/20 rounded text-[9px] font-black uppercase tracking-widest w-fit mb-1">
+                                {msg.audience}
+                              </span>
+                              <p className="text-[9px] font-bold text-slate-400 uppercase">{msg.date}</p>
+                           </div>
+                        </td>
+                        <td className="py-4 px-6 text-right">
+                           <div className="flex items-center justify-end space-x-2">
+                              <button onClick={() => setViewItem(msg)} className="w-7 h-7 rounded bg-indigo-500/10 text-indigo-500 hover:bg-indigo-500 hover:text-white flex items-center justify-center transition-all"><Eye size={12} /></button>
+                              <button onClick={() => handleDeleteMessage(msg.rawId, msg.id)} className="w-7 h-7 rounded bg-rose-500/10 text-rose-500 hover:bg-rose-500 hover:text-white flex items-center justify-center transition-all shadow-sm shadow-rose-500/10"><Trash2 size={12} /></button>
+                           </div>
+                        </td>
+                      </tr>
+                    ))}
+                    {filteredMessages.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="py-20 text-center opacity-50">
+                          <Users size={32} className="mx-auto mb-3 text-slate-400" />
+                          <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest">No sent messages found</p>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
             )}
 
             {activeTab === 'NoticeBoard' && (
-              <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                 {filteredNotices.map(notice => (
-                   <div key={notice.id} className="p-4 bg-gray-50 dark:bg-white/[0.02] border border-[var(--border-color)] dark:border-white/5 rounded-xl hover:border-amber-500/30 transition-all group overflow-hidden relative shadow-sm">
-                      <div className="flex items-start justify-between mb-3">
-                         <div className="flex items-center space-x-3">
-                            <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center border border-amber-500/20">
-                               <Bell size={20} />
-                            </div>
-                            <span className="px-2 py-0.5 bg-indigo-500/10 text-indigo-500 border border-indigo-500/20 rounded text-[8px] font-black uppercase tracking-widest">
-                               {notice.visibility}
-                            </span>
-                         </div>
-                         <div className="flex space-x-1">
-                            <button onClick={() => handleEditNotice(notice)} className="w-7 h-7 rounded border border-[var(--border-color)] dark:border-white/10 flex items-center justify-center text-slate-500 hover:text-[var(--text-primary)] hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"><Edit size={12} /></button>
-                            <button onClick={() => handleDeleteNotice(notice.rawId, notice.id)} className="w-7 h-7 rounded border border-[var(--border-color)] dark:border-white/10 flex items-center justify-center text-rose-500 hover:text-white hover:bg-rose-500 transition-colors"><Trash2 size={12} /></button>
-                         </div>
-                      </div>
-                      <div>
-                         <h4 className="text-[13px] font-black text-[var(--text-primary)] uppercase tracking-tight">{notice.title}</h4>
-                         <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mt-1">ID: {notice.id} • By {notice.publishedBy}</p>
-                      </div>
-                      <div className="flex items-center justify-between mt-4">
-                         <div className="flex items-center text-[10px] font-bold text-slate-400">
-                            <Clock size={12} className="mr-1.5" /> Date: {notice.date}
-                         </div>
-                         <span className={`text-[10px] font-black uppercase tracking-widest ${notice.status === 'Active' ? 'text-emerald-500' : 'text-amber-500'}`}>
-                            • {notice.status}
-                         </span>
-                      </div>
-                   </div>
-                 ))}
+              <div className="flex-1 overflow-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-gray-100 dark:border-white/5 sticky top-0 bg-white dark:bg-[#0f172a] z-10">
+                      <th className="py-4 px-6 text-[10px] font-black text-slate-500 uppercase tracking-widest whitespace-nowrap">Notice Title</th>
+                      <th className="py-4 px-6 text-[10px] font-black text-slate-500 uppercase tracking-widest whitespace-nowrap">Notice Content</th>
+                      <th className="py-4 px-6 text-[10px] font-black text-slate-500 uppercase tracking-widest whitespace-nowrap text-center">Visibility</th>
+                      <th className="py-4 px-6 text-[10px] font-black text-slate-500 uppercase tracking-widest whitespace-nowrap text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredNotices.map(notice => (
+                      <tr key={notice.id} className="border-b border-gray-50 dark:border-white/[0.02] hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors group">
+                        <td className="py-4 px-6">
+                          <div className="flex items-center space-x-3">
+                             <div className="w-8 h-8 rounded-lg bg-amber-500/10 text-amber-500 flex items-center justify-center border border-amber-500/20 group-hover:scale-110 transition-transform">
+                                <Bell size={14} />
+                             </div>
+                             <div>
+                                <h4 className="text-[11px] font-black text-[var(--text-primary)] uppercase tracking-tight mb-1">{notice.title}</h4>
+                                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.05em]">ID: {notice.id}</p>
+                             </div>
+                          </div>
+                        </td>
+                        <td className="py-4 px-6">
+                           <div className="max-w-[250px]">
+                              <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 leading-tight">
+                                 {truncateWords(notice.content)}
+                              </p>
+                           </div>
+                        </td>
+                        <td className="py-4 px-6 text-center">
+                           <div className="flex flex-col items-center">
+                              <span className="px-2 py-0.5 bg-indigo-500/10 text-indigo-500 border border-indigo-500/20 rounded text-[8px] font-black uppercase tracking-widest mb-1">
+                                   {notice.visibility}
+                              </span>
+                              <p className="text-[9px] font-bold text-slate-400 uppercase">{notice.date}</p>
+                           </div>
+                        </td>
+                        <td className="py-4 px-6 text-right">
+                          <div className="flex items-center justify-end space-x-2">
+                             <button onClick={() => setViewItem(notice)} className="w-7 h-7 rounded bg-amber-500/10 text-amber-500 hover:bg-amber-500 hover:text-white flex items-center justify-center transition-all"><Eye size={12} /></button>
+                             <button onClick={() => handleEditNotice(notice)} className="w-7 h-7 rounded bg-indigo-500/10 text-indigo-500 hover:bg-indigo-500 hover:text-white flex items-center justify-center transition-all shadow-sm shadow-indigo-500/10"><Edit size={12} /></button>
+                             <button onClick={() => handleDeleteNotice(notice.rawId, notice.id)} className="w-7 h-7 rounded bg-rose-500/10 text-rose-500 hover:bg-rose-500 hover:text-white flex items-center justify-center transition-all shadow-sm shadow-rose-500/10"><Trash2 size={12} /></button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                    {filteredNotices.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="py-20 text-center opacity-50">
+                          <Bell size={32} className="mx-auto mb-3 text-slate-400" />
+                          <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest">No active notices found</p>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
             )}
 
@@ -228,6 +329,27 @@ const CommunicationManagement = () => {
         <PostNoticeModal onClose={closeModal} onSuccess={fetchAll} editItem={editItem} />
       )}
 
+      {viewItem && (
+        <GenericModal 
+          title={`Detailed View : ${viewItem.title || viewItem.subject}`} 
+          icon={Eye} 
+          color={activeTab === 'NoticeBoard' ? 'amber' : 'indigo'} 
+          onClose={() => setViewItem(null)}
+        >
+          <div className="space-y-4">
+            <div className="p-4 bg-gray-50 dark:bg-white/[0.02] border border-[var(--border-color)] dark:border-white/10 rounded-xl">
+               <p className="text-[13px] font-medium text-[var(--text-primary)] leading-relaxed whitespace-pre-wrap">
+                  {viewItem.content}
+               </p>
+            </div>
+            <div className="flex items-center justify-between px-2 text-[10px] font-black text-slate-500 uppercase tracking-widest">
+               <span>DATE: {viewItem.date}</span>
+               <span>ID: {viewItem.id}</span>
+            </div>
+          </div>
+        </GenericModal>
+      )}
+
 
 
     </div>
@@ -240,52 +362,66 @@ const PostNoticeModal = ({ onClose, onSuccess, editItem }) => {
   const [formData, setFormData] = useState({
     title: editItem?.title || '',
     publish_date: editItem?.date || new Date().toISOString().split('T')[0],
-    visibility: editItem?.visibility || 'Parents Only',
-    content: editItem?.content || '',
-    status: 'Active'
+    content: editItem?.message || editItem?.content || '',
+    type: 'NOTICE'
   });
 
   const handleSubmit = async () => {
     try {
+      if (!formData.title || !formData.content) return alert('Please fill title and message');
+      
+      const payload = {
+        title: formData.title,
+        content: formData.content
+      };
+
       if (editItem) {
-        await api.put(`/notices/${editItem.rawId}`, formData);
+        // 1. Update main notices table
+        await api.put(`/notices/${editItem.rawId}`, payload);
+        
+        // 2. Update existing notification in parent-notifications table
+        // We match by title/content because we didn't have notice_id before, 
+        // but now we'll favor updating based on notice_id if possible.
+        try {
+          // If we add notice_id to the table, we should update where notice_id = editItem.rawId
+          await api.put(`/parent-notifications/sync-notice/${editItem.rawId}`, {
+             title: formData.title,
+             message: formData.content
+          });
+        } catch (e) { console.log("Notification sync update failed/no route", e); }
       } else {
-        await api.post('/notices', formData);
+        // 1. Save to main notices table (New)
+        const res = await api.post('/notices', payload);
+        const newId = res.data.id || res.data.data?.id;
+        
+        // 2. Broadcast to parent app notifications
+        await api.post('/parent-notifications', {
+          notice_id: newId,
+          title: formData.title,
+          message: formData.content,
+          type: 'NOTICE',
+          recipient_login_id: null 
+        });
       }
       onSuccess();
       onClose();
-    } catch (err) { alert('Save failed: ' + err.message); }
+    } catch (err) { alert('Operation failed: ' + err.message); }
   };
 
   return (
-    <GenericModal title={editItem ? "Update Notice" : "Post New Notice"} icon={Bell} color="amber" onClose={onClose} onSave={handleSubmit}>
+    <GenericModal title="Admin Global Notice" icon={Bell} color="amber" onClose={onClose} onSave={handleSubmit}>
       <div className="space-y-4">
-        <InputField label="NOTICE TITLE" icon={FileText} placeholder="e.g. Annual Parent Meeting" value={formData.title} onChange={v => setFormData({...formData, title: v})} />
-        <div className="grid grid-cols-2 gap-4">
-          <InputField label="PUBLISH DATE" icon={Clock} type="date" value={formData.publish_date} onChange={v => setFormData({...formData, publish_date: v})} />
-          <div className="flex flex-col">
-            <label className="text-[9px] font-black text-[var(--text-secondary)] uppercase tracking-widest mb-1.5 ml-1">VISIBILITY</label>
-            <select 
-              value={formData.visibility}
-              onChange={e => setFormData({...formData, visibility: e.target.value})}
-              className="h-10 px-3 bg-white dark:bg-[#1e293b] border border-[var(--border-color)] dark:border-white/10 rounded-lg text-[11px] font-bold text-[var(--text-primary)] outline-none focus:border-amber-500"
-            >
-              <option>Public (Everyone)</option>
-              <option>Parents Only</option>
-              <option>Students Only</option>
-              <option>Staff Only</option>
-            </select>
-          </div>
-        </div>
+        <InputField label="NOTICE TITLE" icon={FileText} placeholder="e.g. School Holiday Announcement" value={formData.title} onChange={v => setFormData({...formData, title: v})} />
         <div className="flex flex-col">
-          <label className="text-[9px] font-black text-[var(--text-secondary)] uppercase tracking-widest mb-1.5 ml-1">DESCRIPTION</label>
+          <label className="text-[9px] font-black text-[var(--text-secondary)] uppercase tracking-widest mb-1.5 ml-1">NOTICE DESCRIPTION</label>
           <textarea 
             value={formData.content}
             onChange={e => setFormData({...formData, content: e.target.value})}
-            className="w-full h-28 p-3 bg-white dark:bg-[#1e293b] border border-[var(--border-color)] dark:border-white/10 rounded-lg text-[12px] font-medium text-[var(--text-primary)] outline-none focus:border-amber-500 transition-all custom-scrollbar resize-none"
-            placeholder="Details for the notice board..."
+            className="w-full h-32 p-3 bg-white dark:bg-[#1e293b] border border-[var(--border-color)] dark:border-white/10 rounded-lg text-[12px] font-medium text-[var(--text-primary)] outline-none focus:border-amber-500 transition-all custom-scrollbar resize-none"
+            placeholder="Write the notice details here for the Parent App..."
           ></textarea>
         </div>
+        <p className="text-[8px] font-bold text-amber-500 uppercase tracking-widest text-center mt-2 border border-amber-500/20 py-1 rounded">THIS WILL BE SHOWN ON ALL PARENTS' HOME SCREEN</p>
       </div>
     </GenericModal>
   );
@@ -294,55 +430,128 @@ const PostNoticeModal = ({ onClose, onSuccess, editItem }) => {
 const ComposeMessageModal = ({ onClose, onSuccess }) => {
   const [formData, setFormData] = useState({
     subject: '',
-    audience: 'Parents Only',
-    type: 'SMS & Email',
+    recipient_login_id: '',
     content: ''
+  });
+  const [parents, setParents] = useState([]);
+  const [classes, setClasses] = useState(['All Classes']);
+  const [search, setSearch] = useState('');
+  const [selectedClass, setSelectedClass] = useState('All Classes');
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [selectedStudent, setSelectedStudent] = useState(null);
+
+  useEffect(() => {
+    api.get('/parent-contact-list').then(res => setParents(res.data)).catch(() => {});
+    api.get('/classes-list').then(res => setClasses(['All Classes', ...res.data])).catch(() => {});
+  }, []);
+
+  const filteredParents = parents.filter(p => {
+    const matchesSearch = p.student_name.toLowerCase().includes(search.toLowerCase()) || p.contact_no.includes(search);
+    const matchesClass = selectedClass === 'All Classes' || (p.class && selectedClass && p.class.toLowerCase().trim() === selectedClass.toLowerCase().trim());
+    return matchesSearch && matchesClass;
   });
 
   const handleSubmit = async () => {
+    if (!formData.subject || !formData.content) return alert('Please fill title and message');
     try {
-      await api.post('/messages', formData);
+      await api.post('/parent-notifications', {
+        title: formData.subject,
+        message: formData.content,
+        type: 'MESSAGE',
+        recipient_login_id: formData.recipient_login_id || null
+      });
       onSuccess();
       onClose();
     } catch (err) { alert('Send failed: ' + err.message); }
   };
 
   return (
-    <GenericModal title="Message to Parents" icon={Send} color="indigo" onClose={onClose} onSave={handleSubmit}>
+    <GenericModal title="Secure Direct Message" icon={Send} color="indigo" onClose={onClose} onSave={handleSubmit}>
       <div className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
+        {/* Step 1: Target Selection */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div className="flex flex-col">
-            <label className="text-[9px] font-black text-[var(--text-secondary)] uppercase tracking-widest mb-1.5 ml-1">AUDIENCE</label>
+            <label className="text-[9px] font-black text-[var(--text-secondary)] uppercase tracking-widest mb-1.5 ml-1">FILTER CLASS</label>
             <select 
-              value={formData.audience}
-              onChange={e => setFormData({...formData, audience: e.target.value})}
-              className="h-10 px-3 bg-white dark:bg-[#1e293b] border border-[var(--border-color)] dark:border-white/10 rounded-lg text-[11px] font-bold text-[var(--text-primary)] outline-none focus:border-indigo-500"
+              value={selectedClass}
+              onChange={e => setSelectedClass(e.target.value)}
+              className="h-10 px-3 bg-white dark:bg-[#1e293b] border border-[var(--border-color)] dark:border-white/10 rounded-lg text-[11px] font-bold text-[var(--text-primary)] outline-none focus:border-indigo-500 transition-all cursor-pointer"
             >
-              <option>Parents Only</option>
-              <option>Specific Parent (by ID)</option>
+              {classes.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
-          <div className="flex flex-col">
-            <label className="text-[9px] font-black text-[var(--text-secondary)] uppercase tracking-widest mb-1.5 ml-1">CHANNEL</label>
-            <select 
-              value={formData.type}
-              onChange={e => setFormData({...formData, type: e.target.value})}
-              className="h-10 px-3 bg-white dark:bg-[#1e293b] border border-[var(--border-color)] dark:border-white/10 rounded-lg text-[11px] font-bold text-[var(--text-primary)] outline-none focus:border-indigo-500"
-            >
-              <option>SMS & Email</option>
-              <option>SMS Only</option>
-              <option>Email Only</option>
-            </select>
+          
+          <div className="md:col-span-2 flex flex-col relative">
+            <label className="text-[9px] font-black text-[var(--text-secondary)] uppercase tracking-widest mb-1.5 ml-1">SEARCH STUDENT NAME / ROLL NO</label>
+            <div className="relative group">
+              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+                <Search size={14} strokeWidth={2.5} />
+              </div>
+              <input 
+                type="text"
+                placeholder={selectedClass === 'All Classes' ? "Search all students..." : `Search in Class ${selectedClass}...`}
+                value={search}
+                onFocus={() => setShowDropdown(true)}
+                onChange={e => { setSearch(e.target.value); setShowDropdown(true); }}
+                className="w-full h-10 pl-9 pr-4 bg-white dark:bg-white/[0.03] border border-[var(--border-color)] dark:border-white/10 rounded-lg text-[11px] font-bold text-[var(--text-primary)] outline-none focus:border-indigo-500 transition-all shadow-inner"
+              />
+              {showDropdown && search.length > 0 && (
+                <div className="absolute top-full left-0 w-full mt-1 bg-white dark:bg-[#1e293b] border border-[var(--border-color)] dark:border-white/10 rounded-lg shadow-2xl z-[110] max-h-[200px] overflow-auto custom-scrollbar">
+                  {filteredParents.map(p => (
+                    <div key={p.id} 
+                      className="p-3 hover:bg-indigo-500/10 border-b border-gray-100 dark:border-white/5 cursor-pointer flex items-center justify-between"
+                      onClick={() => {
+                        setFormData({...formData, recipient_login_id: p.contact_no});
+                        setSearch(`${p.student_name} (${p.father_name})`);
+                        setSelectedStudent(p);
+                        setShowDropdown(false);
+                      }}
+                    >
+                      <div>
+                         <span className="text-[11px] font-black text-[var(--text-primary)] uppercase block leading-none">{p.student_name}</span>
+                         <span className="text-[9px] font-bold text-slate-500 opacity-70">F: {p.father_name} • Class: {p.class}</span>
+                      </div>
+                      <span className="px-2 py-0.5 bg-indigo-500/10 text-indigo-500 rounded text-[9px] font-black">ROLL {p.roll_no || '-'}</span>
+                    </div>
+                  ))}
+                  {filteredParents.length === 0 && (
+                    <div className="p-4 text-center text-[10px] font-bold text-slate-500 uppercase">No student found in {selectedClass}</div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
-        <InputField label="SUBJECT" icon={FileText} placeholder="Enter subject..." value={formData.subject} onChange={v => setFormData({...formData, subject: v})} />
+        
+        {/* Step 2: Confirmation / Info */}
+        {selectedStudent ? (
+           <div className="p-3 bg-emerald-500/5 border border-emerald-500/10 rounded-xl flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                 <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-500 flex items-center justify-center"><CheckCircle2 size={16} /></div>
+                 <div>
+                    <span className="text-[10px] font-black text-[var(--text-primary)] uppercase block">Message for {selectedStudent.student_name}</span>
+                    <span className="text-[9px] font-bold text-emerald-600 uppercase">Parent's Phone: {selectedStudent.contact_no}</span>
+                 </div>
+              </div>
+              <button onClick={() => {setSelectedStudent(null); setSearch(''); setFormData({...formData, recipient_login_id: ''});}} className="text-[8px] font-black text-rose-500 uppercase hover:underline">Change</button>
+           </div>
+        ) : (
+           <div className="flex items-center space-x-2 py-2 px-3 bg-indigo-500/5 border border-indigo-500/10 rounded-lg">
+              <Smartphone size={12} className="text-indigo-500" />
+              <span className="text-[10px] font-black text-indigo-500 uppercase">Destination: <span className="text-[var(--text-primary)]">BROADCAST TO ALL PARENTS</span></span>
+           </div>
+        )}
+
+        {/* Step 3: Message Content */}
+        <InputField label="MESSAGE TITLE" icon={FileText} placeholder="e.g. Conduct Warning" value={formData.subject} onChange={v => setFormData({...formData, subject: v})} />
+
         <div className="flex flex-col">
-          <label className="text-[9px] font-black text-[var(--text-secondary)] uppercase tracking-widest mb-1.5 ml-1">MESSAGE BODY</label>
+          <label className="text-[9px] font-black text-[var(--text-secondary)] uppercase tracking-widest mb-1.5 ml-1">PRIVATE MESSAGE BODY</label>
           <textarea 
             value={formData.content}
             onChange={e => setFormData({...formData, content: e.target.value})}
-            className="w-full h-24 p-3 bg-white dark:bg-[#1e293b] border border-[var(--border-color)] dark:border-white/10 rounded-lg text-[12px] font-medium text-[var(--text-primary)] outline-none focus:border-indigo-500 transition-all custom-scrollbar resize-none"
-            placeholder="Type your message for parents..."
+            className="w-full h-32 p-3 bg-white dark:bg-[#1e293b] border border-[var(--border-color)] dark:border-white/10 rounded-lg text-[12px] font-medium text-[var(--text-primary)] outline-none focus:border-indigo-500 transition-all custom-scrollbar resize-none"
+            placeholder="Describe the matter clearly for the parent..."
           ></textarea>
         </div>
       </div>
@@ -382,12 +591,14 @@ const GenericModal = ({ title, icon: Icon, color, children, onClose, onSave }) =
         </div>
         <div className="p-6">
            {children}
-           <div className="mt-8 flex items-center justify-end space-x-3">
-              <button onClick={onClose} className="px-6 h-10 text-[11px] font-black text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors uppercase tracking-widest">Cancel</button>
-              <button onClick={onSave} className={`px-8 h-10 text-white text-[11px] font-black rounded-lg transition-all uppercase tracking-widest ${btnColorMap[color]}`}>
-                 Submit Details
-              </button>
-           </div>
+           {onSave && (
+             <div className="mt-8 flex items-center justify-end space-x-3">
+                <button onClick={onClose} className="px-6 h-10 text-[11px] font-black text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors uppercase tracking-widest">Cancel</button>
+                <button onClick={onSave} className={`px-8 h-10 text-white text-[11px] font-black rounded-lg transition-all uppercase tracking-widest ${btnColorMap[color]}`}>
+                   Submit Details
+                </button>
+             </div>
+           )}
         </div>
       </div>
     </div>

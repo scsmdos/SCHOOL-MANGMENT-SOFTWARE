@@ -1,3 +1,4 @@
+import React from 'react';
 import { Twitter, Facebook, Instagram, Youtube, MapPin, Mail, Phone, Clock, Heart } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import footerLogo from '../../assets/logo.jpeg';

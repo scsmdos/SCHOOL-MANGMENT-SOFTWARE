@@ -4,6 +4,8 @@ import {
   Edit, Trash2, TrendingUp, TrendingDown, AlertCircle, X, Save, Receipt, RefreshCw, Loader2
 } from 'lucide-react';
 import api from '../api/axios';
+import toast from 'react-hot-toast';
+import logoImg from '../assets/logo.jpeg';
 
 /* ── Sample Expenses (kept as fallback until backend has expenses endpoint) ── */
 const SAMPLE_EXPENSES = [
@@ -23,6 +25,7 @@ const FinanceFees = () => {
   const [isFeeModalOpen, setIsFeeModalOpen] = useState(false);
   const [isExpModalOpen, setIsExpModalOpen] = useState(false);
   const [currentEdit, setCurrentEdit] = useState(null);
+  const [invoiceData, setInvoiceData] = useState(null);
 
   const fetchTransactions = useCallback(async () => {
     setLoading(true);
@@ -77,20 +80,62 @@ const FinanceFees = () => {
 
   /* ── CRUD Logic ── */
   const handleDeleteFee = async (rawId, displayId) => {
-    if (!window.confirm(`Delete receipt ${displayId}?`)) return;
+    if (!window.confirm(`Delete receipt #${displayId || rawId}?`)) return;
     try {
       await api.delete(`/transactions/${rawId}`);
       setFeeData(prev => prev.filter(i => i.rawId !== rawId));
+      toast.success('Transaction deleted successfully');
     } catch (err) {
-      alert('Delete failed: ' + (err.response?.data?.message || err.message));
+      toast.error('Delete failed: ' + (err.response?.data?.message || err.message));
     }
   };
-  const handleDeleteExp = (id) => {
-    if (window.confirm('Delete this voucher?')) setExpenseData(expenseData.filter(i => i.id !== id));
+
+  const handleDeleteExp = async (rawId, displayId) => {
+    if (!window.confirm(`Delete voucher #${displayId || rawId}?`)) return;
+    try {
+      await api.delete(`/transactions/${rawId}`);
+      setExpenseData(prev => prev.filter(i => i.rawId !== rawId));
+      toast.success('Expense deleted successfully');
+    } catch (err) {
+      toast.error('Delete failed: ' + (err.response?.data?.message || err.message));
+    }
   };
-  const handlePrint = (id) => {
-    alert(`Generating Print for ${id}...`);
-    window.print();
+  const handlePrint = (item) => {
+    setInvoiceData(item);
+  };
+
+  const handleExportCSV = () => {
+    const isFees = activeTab === 'fees';
+    const data = isFees ? feeData : expenseData;
+
+    if (data.length === 0) {
+      toast.error('No data to export');
+      return;
+    }
+
+    const headers = isFees 
+      ? ['Receipt No', 'Student', 'Class', 'Type', 'Method', 'Amount', 'Date', 'Status']
+      : ['Voucher ID', 'Title', 'Payee', 'Category', 'Amount', 'Date', 'Status'];
+
+    const csvContent = [
+      headers.join(','),
+      ...data.map(row => {
+        const values = isFees 
+          ? [row.id, row.student, row.class, row.type, row.method, row.amount, row.date, row.status]
+          : [row.id, row.title, row.payee, row.category, row.amount, row.date, row.status];
+        return values.map(v => `"${v}"`).join(',');
+      })
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `${isFees ? 'fees' : 'expenses'}_ledger_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success(`${isFees ? 'Fees' : 'Expenses'} Exported successfully!`);
   };
 
   return (
@@ -103,7 +148,10 @@ const FinanceFees = () => {
           <p className="text-[10px] font-bold text-[var(--text-secondary)] tracking-widest uppercase">Automated Accounting · Revenue Management</p>
         </div>
         <div className="flex items-center space-x-2">
-          <button className="flex items-center space-x-2 h-9 px-4 rounded-md border border-[var(--border-color)] dark:border-[#334155] bg-white dark:bg-[#10162A] text-[11px] font-extrabold text-[var(--text-primary)] hover:bg-gray-50 dark:hover:bg-[#1a2234] transition-colors shadow-sm">
+          <button 
+            onClick={handleExportCSV}
+            className="flex items-center space-x-2 h-9 px-4 rounded-md border border-[var(--border-color)] dark:border-[#334155] bg-white dark:bg-[#10162A] text-[11px] font-extrabold text-[var(--text-primary)] hover:bg-gray-50 dark:hover:bg-[#1a2234] transition-colors shadow-sm"
+          >
             <Download size={13} strokeWidth={2.5} className="text-[#10b981]" /><span>Export Ledger</span>
           </button>
           <button 
@@ -198,9 +246,9 @@ const FinanceFees = () => {
                     </td>
                     <td className="px-5 py-4 text-right">
                       <div className="flex items-center justify-end space-x-1">
-                        <button onClick={() => handlePrint(item.id)} className="w-7 h-7 rounded flex items-center justify-center bg-white dark:bg-[#10162A] border border-gray-200 dark:border-[#334155] text-indigo-500 hover:bg-indigo-500 hover:text-white transition-all shadow-sm"><Printer size={12} strokeWidth={2.5} /></button>
+                        <button onClick={() => handlePrint(item)} className="w-7 h-7 rounded flex items-center justify-center bg-white dark:bg-[#10162A] border border-gray-200 dark:border-[#334155] text-indigo-500 hover:bg-indigo-500 hover:text-white transition-all shadow-sm"><Printer size={12} strokeWidth={2.5} /></button>
                         <button onClick={() => { setCurrentEdit(item); setIsFeeModalOpen(true); }} className="w-7 h-7 rounded flex items-center justify-center bg-white dark:bg-[#10162A] border border-gray-200 dark:border-[#334155] text-[#10b981] hover:bg-[#10b981] hover:text-white transition-all shadow-sm"><Edit size={12} strokeWidth={2.5} /></button>
-                        <button onClick={() => handleDeleteFee(item.id)} className="w-7 h-7 rounded flex items-center justify-center bg-white dark:bg-[#10162A] border border-gray-200 dark:border-[#334155] text-[#f43f5e] hover:bg-[#f43f5e] hover:text-white transition-all shadow-sm"><Trash2 size={12} strokeWidth={2.5} /></button>
+                        <button onClick={() => handleDeleteFee(item.rawId, item.id)} className="w-7 h-7 rounded flex items-center justify-center bg-white dark:bg-[#10162A] border border-gray-200 dark:border-[#334155] text-[#f43f5e] hover:bg-[#f43f5e] hover:text-white transition-all shadow-sm"><Trash2 size={12} strokeWidth={2.5} /></button>
                       </div>
                     </td>
                   </tr>
@@ -242,7 +290,7 @@ const FinanceFees = () => {
                     <td className="px-5 py-4 text-right">
                       <div className="flex items-center justify-end space-x-1">
                         <button onClick={() => { setCurrentEdit(item); setIsExpModalOpen(true); }} className="w-7 h-7 rounded flex items-center justify-center bg-white dark:bg-[#10162A] border border-gray-200 dark:border-[#334155] text-[#10b981] hover:bg-[#10b981] hover:text-white transition-all shadow-sm"><Edit size={12} strokeWidth={2.5} /></button>
-                        <button onClick={() => handleDeleteExp(item.id)} className="w-7 h-7 rounded flex items-center justify-center bg-white dark:bg-[#10162A] border border-gray-200 dark:border-[#334155] text-[#f43f5e] hover:bg-[#f43f5e] hover:text-white transition-all shadow-sm"><Trash2 size={12} strokeWidth={2.5} /></button>
+                        <button onClick={() => handleDeleteExp(item.rawId, item.id)} className="w-7 h-7 rounded flex items-center justify-center bg-white dark:bg-[#10162A] border border-gray-200 dark:border-[#334155] text-[#f43f5e] hover:bg-[#f43f5e] hover:text-white transition-all shadow-sm"><Trash2 size={12} strokeWidth={2.5} /></button>
                       </div>
                     </td>
                   </tr>
@@ -264,6 +312,7 @@ const FinanceFees = () => {
               type: 'Income',
               category: data.type,
               amount: data.amount,
+              student_id: data.student_id, // Link to student ID
               student_name: data.student,
               class_name: data.class,
               payment_method: data.method,
@@ -277,8 +326,9 @@ const FinanceFees = () => {
               await api.post('/transactions', payload);
             }
             fetchTransactions();
+            toast.success(currentEdit?.rawId ? 'Receipt updated!' : 'Fee collected successfully!');
             setIsFeeModalOpen(false);
-          } catch (e) { alert('Save failed: ' + e.message); }
+          } catch (e) { toast.error('Save failed: ' + e.message); }
         }}
       />
       <ExpenseModal 
@@ -303,10 +353,12 @@ const FinanceFees = () => {
               await api.post('/transactions', payload);
             }
             fetchTransactions();
+            toast.success(currentEdit?.rawId ? 'Expense updated!' : 'Expense added successfully!');
             setIsExpModalOpen(false);
-          } catch (e) { alert('Save failed: ' + e.message); }
+          } catch (e) { toast.error('Save failed: ' + e.message); }
         }}
       />
+      <InvoiceModal data={invoiceData} onClose={() => setInvoiceData(null)} />
     </div>
   );
 };
@@ -420,30 +472,6 @@ const FinancialReports = ({ feeData = [], expenseData = [] }) => {
           {chartData.map(d => <span key={d.m} className="text-[9px] font-bold uppercase">{d.m}</span>)}
         </div>
       </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4">
-        <div className="bg-[#1e293b] rounded-xl border border-slate-700 p-6">
-          <h3 className="text-white text-[14px] font-black uppercase tracking-wider mb-6">Financial Statements</h3>
-          <div className="space-y-3">
-            {reports.map((r, i) => (
-              <div key={i} className="flex items-center justify-between p-4 bg-slate-800/50 rounded-lg border border-slate-700/50 hover:bg-slate-800 transition-colors cursor-pointer group">
-                <div className="flex items-center space-x-4">
-                  <div className="w-9 h-9 rounded bg-blue-500/10 flex items-center justify-center text-blue-400"><FileText size={16} /></div>
-                  <span className="text-slate-200 text-[11px] font-bold">{r.title}</span>
-                </div>
-                <button className="text-slate-500 group-hover:text-white transition-colors"><Download size={14} /></button>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="bg-gradient-to-br from-indigo-700 to-purple-800 rounded-xl p-8 flex flex-col items-center justify-center text-center shadow-2xl relative overflow-hidden">
-           <div className="w-16 h-16 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center text-white mb-6 border border-white/10"><Receipt size={32} /></div>
-           <h3 className="text-white text-xl font-black mb-2 uppercase">Automated Billing</h3>
-           <p className="text-white/70 text-[11px] font-medium max-w-[280px] leading-relaxed mb-8">Send automated fee alerts and generate payslips via SMS/Email.</p>
-           <button className="px-10 py-3 bg-white text-indigo-900 rounded-lg text-[10px] font-black uppercase tracking-widest shadow-xl hover:bg-slate-100 transition-all">Configure Billing</button>
-        </div>
-      </div>
     </div>
   );
 };
@@ -452,10 +480,71 @@ const FinancialReports = ({ feeData = [], expenseData = [] }) => {
 const inputClass = "w-full h-10 px-3 bg-white dark:bg-[#10162A] border border-gray-200 dark:border-[#334155] rounded-md text-[11px] font-bold text-[var(--text-primary)] focus:outline-none focus:border-[#6366f1] transition-colors shadow-sm";
 
 const FeeModal = ({ isOpen, onClose, onSave, editData }) => {
-  const [formData, setFormData] = useState(editData || { student: '', class: 'PLAY', type: 'Tuition Fee', method: 'CASH', amount: '', date: new Date().toISOString().slice(0,10), status: 'Completed' });
+  const [formData, setFormData] = useState({ student: '', student_id: '', class: 'PLAY', type: 'Tuition Fee', method: 'VIA CASH', amount: '', date: new Date().toISOString().slice(0, 10), status: 'Completed' });
+  const [students, setStudents] = useState([]);
+  const [filteredStudents, setFilteredStudents] = useState([]);
+  const [showDropdown, setShowDropdown] = useState(false);
 
-  React.useEffect(() => { if(editData) setFormData(editData); }, [editData]);
+  useEffect(() => {
+    if (isOpen) {
+      if (editData) {
+        setFormData({
+          ...editData,
+          student: editData.student || '',
+          student_id: editData.student_id || '',
+          class: editData.class || 'PLAY',
+          type: editData.type || 'Tuition Fee',
+          method: editData.method || 'VIA CASH',
+          amount: editData.amount || '',
+          date: editData.date || new Date().toISOString().slice(0, 10),
+          status: editData.status || 'Completed'
+        });
+      } else {
+        setFormData({ 
+          student: '', 
+          student_id: '', 
+          class: 'PLAY', 
+          type: 'Tuition Fee', 
+          method: 'VIA CASH', 
+          amount: '', 
+          date: new Date().toISOString().slice(0, 10), 
+          status: 'Completed' 
+        });
+      }
+      // Fetch active students for selection
+      api.get('/admissions').then(res => {
+        const list = res.data?.data ?? res.data ?? [];
+        setStudents(list.filter(s => s.status === 'Approved'));
+      }).catch(err => console.error('Error fetching students:', err));
+    }
+  }, [isOpen, editData]);
+
+  const handleNameChange = (val) => {
+    setFormData({ ...formData, student: val, student_id: '' });
+    if (val.length > 1) {
+      const matches = students.filter(s => 
+        s.student_name.toLowerCase().includes(val.toLowerCase()) || 
+        (s.admission_no && s.admission_no.toLowerCase().includes(val.toLowerCase()))
+      );
+      setFilteredStudents(matches.slice(0, 5));
+      setShowDropdown(true);
+    } else {
+      setShowDropdown(false);
+    }
+  };
+
+  const selectStudent = (s) => {
+    setFormData({
+      ...formData,
+      student: s.student_name,
+      student_id: s.admission_no || s.id,
+      class: s.admitted_into_class || 'PLAY'
+    });
+    setShowDropdown(false);
+  };
+
   if (!isOpen) return null;
+
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose}></div>
@@ -466,21 +555,42 @@ const FeeModal = ({ isOpen, onClose, onSave, editData }) => {
         </div>
         <div className="p-6 space-y-4">
           <div className="grid grid-cols-2 gap-4">
-            <div className="col-span-2"><label className="text-[10px] font-black text-[#64748b] uppercase tracking-widest mb-1 block">Student Name</label><input className={inputClass} value={formData.student} onChange={e=>setFormData({...formData, student: e.target.value})} /></div>
+            <div className="col-span-2 relative">
+              <label className="text-[10px] font-black text-[#64748b] uppercase tracking-widest mb-1 block">Student Search (Name or ID)</label>
+              <div className="relative">
+                <input className={inputClass} placeholder="Type student name..." value={formData.student} onChange={e => handleNameChange(e.target.value)} onFocus={() => formData.student.length > 1 && setShowDropdown(true)} />
+                {formData.student_id ? <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center"><div className="w-2 h-2 rounded-full bg-green-500 mr-2"></div><span className="text-[8px] font-black text-green-500 uppercase">{formData.student_id}</span></div> : null}
+              </div>
+              
+              {showDropdown && filteredStudents.length > 0 && (
+                <div className="absolute z-50 left-0 right-0 mt-1 bg-white dark:bg-[#0f172a] border border-gray-200 dark:border-[#334155] rounded-lg shadow-xl overflow-hidden">
+                  {filteredStudents.map(s => (
+                    <button key={s.id} onClick={() => selectStudent(s)} className="w-full px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-white/5 border-b border-gray-100 dark:border-[#334155] last:border-0 flex justify-between items-center transition-colors">
+                      <div>
+                        <p className="text-[11px] font-black text-[var(--text-primary)]">{s.student_name}</p>
+                        <p className="text-[9px] font-bold text-[#64748b]">{s.admission_no || `ID: ${s.id}`}</p>
+                      </div>
+                      <span className="text-[9px] font-black text-indigo-500 bg-indigo-50 dark:bg-indigo-500/10 px-2 py-0.5 rounded">{s.admitted_into_class}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            
             <div>
               <label className="text-[10px] font-black text-[#64748b] uppercase tracking-widest mb-1 block">Class</label>
-              <select className={inputClass} value={formData.class} onChange={e=>setFormData({...formData, class: e.target.value})}>
-                {['PLAY', 'NURSERY', 'LKG', 'UKG', '1ST', '2ND', '3RD', '4TH', '5TH'].map(c => <option key={c} value={c}>{c}</option>)}
+              <select className={inputClass} value={formData.class} onChange={e => setFormData({ ...formData, class: e.target.value })}>
+                {['PLAY', 'NURSERY', 'LKG', 'UKG', 'CLASS 1', 'CLASS 2', 'CLASS 3', 'CLASS 4', 'CLASS 5', 'CLASS 6', 'CLASS 7', 'CLASS 8', 'CLASS 9', 'CLASS 10'].map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
-            <div><label className="text-[10px] font-black text-[#64748b] uppercase tracking-widest mb-1 block">Amount</label><input className={inputClass} value={formData.amount} onChange={e=>setFormData({...formData, amount: e.target.value})} /></div>
-            <div><label className="text-[10px] font-black text-[#64748b] uppercase tracking-widest mb-1 block">Payment Type</label><select className={inputClass} value={formData.type} onChange={e=>setFormData({...formData, type: e.target.value})}><option>Tuition Fee</option><option>Exam Fee</option><option>Transport</option></select></div>
-            <div><label className="text-[10px] font-black text-[#64748b] uppercase tracking-widest mb-1 block">Method</label><select className={inputClass} value={formData.method} onChange={e=>setFormData({...formData, method: e.target.value})}><option>VIA CASH</option><option>ONLINE</option></select></div>
+            <div><label className="text-[10px] font-black text-[#64748b] uppercase tracking-widest mb-1 block">Amount (₹)</label><input className={inputClass} type="number" placeholder="0.00" value={formData.amount} onChange={e => setFormData({ ...formData, amount: e.target.value })} /></div>
+            <div><label className="text-[10px] font-black text-[#64748b] uppercase tracking-widest mb-1 block">Payment Type</label><select className={inputClass} value={formData.type} onChange={e => setFormData({ ...formData, type: e.target.value })}><option>Tuition Fee</option><option>Admission Fee</option><option>Exam Fee</option><option>Transport</option><option>Other</option></select></div>
+            <div><label className="text-[10px] font-black text-[#64748b] uppercase tracking-widest mb-1 block">Method</label><select className={inputClass} value={formData.method} onChange={e => setFormData({ ...formData, method: e.target.value })}><option>VIA CASH</option><option>UP/QR</option><option>BANK TRANSFER</option></select></div>
           </div>
         </div>
         <div className="px-6 py-4 flex justify-end space-x-2 border-t border-gray-200 dark:border-[#334155] bg-gray-50 dark:bg-[#1a2234]">
           <button onClick={onClose} className="px-6 py-2 text-[10px] font-extrabold uppercase bg-gray-100 dark:bg-[#0f172a] rounded">Cancel</button>
-          <button onClick={()=>onSave(formData)} className="px-6 py-2 bg-[#10b981] text-white rounded text-[10px] font-black uppercase tracking-widest shadow-md flex items-center justify-center"><Save size={14} className="mr-2" />Save</button>
+          <button onClick={() => onSave(formData)} className="px-6 py-2 bg-[#10b981] text-white rounded text-[10px] font-black uppercase tracking-widest shadow-md flex items-center justify-center"><Save size={14} className="mr-2" />Save</button>
         </div>
       </div>
     </div>
@@ -488,9 +598,14 @@ const FeeModal = ({ isOpen, onClose, onSave, editData }) => {
 };
 
 const ExpenseModal = ({ isOpen, onClose, onSave, editData }) => {
-  const [formData, setFormData] = useState(editData || { title: '', payee: '', category: 'MAINTENANCE', amount: '', date: new Date().toISOString().slice(0,10), status: 'Completed' });
+  const defaultState = { title: '', payee: '', category: 'MAINTENANCE', amount: '', date: new Date().toISOString().slice(0,10), status: 'Completed' };
+  const [formData, setFormData] = useState(defaultState);
 
-  React.useEffect(() => { if(editData) setFormData(editData); }, [editData]);
+  React.useEffect(() => { 
+    if (isOpen) {
+      setFormData(editData ? { ...editData } : defaultState);
+    }
+  }, [isOpen, editData]);
   if (!isOpen) return null;
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
@@ -504,13 +619,149 @@ const ExpenseModal = ({ isOpen, onClose, onSave, editData }) => {
           <div className="grid grid-cols-2 gap-4">
             <div className="col-span-2"><label className="text-[10px] font-black text-[#64748b] uppercase tracking-widest mb-1 block">Expense Title</label><input className={inputClass} value={formData.title} onChange={e=>setFormData({...formData, title: e.target.value})} /></div>
             <div className="col-span-2"><label className="text-[10px] font-black text-[#64748b] uppercase tracking-widest mb-1 block">Payee Name</label><input className={inputClass} value={formData.payee} onChange={e=>setFormData({...formData, payee: e.target.value})} /></div>
-            <div><label className="text-[10px] font-black text-[#64748b] uppercase tracking-widest mb-1 block">Amount</label><input className={inputClass} value={formData.amount} onChange={e=>setFormData({...formData, amount: e.target.value})} /></div>
-            <div><label className="text-[10px] font-black text-[#64748b] uppercase tracking-widest mb-1 block">Category</label><select className={inputClass} value={formData.category} onChange={e=>setFormData({...formData, category: e.target.value})}><option>MAINTENANCE</option><option>UTILITIES</option><option>OFFICE</option></select></div>
+            <div><label className="text-[10px] font-black text-[#64748b] uppercase tracking-widest mb-1 block">Amount (₹)</label><input className={inputClass} type="number" placeholder="0.00" value={formData.amount} onChange={e=>setFormData({...formData, amount: e.target.value})} /></div>
+            <div><label className="text-[10px] font-black text-[#64748b] uppercase tracking-widest mb-1 block">Category</label><select className={inputClass} value={formData.category} onChange={e=>setFormData({...formData, category: e.target.value})}><option value="MAINTENANCE">MAINTENANCE</option><option value="UTILITIES">UTILITIES</option><option value="OFFICE">OFFICE</option><option value="SALARY">SALARY</option><option value="TRANSPORT">TRANSPORT</option><option value="OTHER">OTHER</option></select></div>
+            <div className="col-span-2"><label className="text-[10px] font-black text-[#64748b] uppercase tracking-widest mb-1 block">Expense Date</label><input type="date" className={inputClass} value={formData.date} onChange={e=>setFormData({...formData, date: e.target.value})} /></div>
           </div>
         </div>
         <div className="px-6 py-4 flex justify-end space-x-2 border-t border-gray-200 dark:border-[#334155] bg-gray-50 dark:bg-[#1a2234]">
           <button onClick={onClose} className="px-6 py-2 text-[10px] font-extrabold uppercase bg-gray-100 dark:bg-[#0f172a] rounded">Cancel</button>
           <button onClick={()=>onSave(formData)} className="px-6 py-2 bg-[#f43f5e] text-white rounded text-[10px] font-black uppercase tracking-widest shadow-md flex items-center justify-center"><Save size={14} className="mr-2" />Save</button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const InvoiceModal = ({ data, onClose }) => {
+  const [studentInfo, setStudentInfo] = useState({ father: '', roll: '' });
+
+  useEffect(() => {
+    if (data && data.student) {
+      api.get('/admissions').then(res => {
+        const all = res.data?.data ?? res.data ?? [];
+        const match = all.find(s => s.student_name === data.student && s.admitted_into_class === data.class);
+        if (match) {
+          setStudentInfo({ father: match.father_name || 'N/A', roll: match.roll_no || 'N/A' });
+        }
+      }).catch(err => console.log(err));
+    }
+  }, [data]);
+
+  if (!data) return null;
+
+  const handleNativePrint = () => {
+    const printElement = document.getElementById('print-invoice-area');
+    const originalContent = document.body.innerHTML;
+
+    // Wrap the print content in a centered container with outerHTML so container styles are preserved
+    document.body.innerHTML = `
+      <div style="display: flex; justify-content: center; width: 100%; padding: 20px; background-color: #ffffff !important;">
+        ${printElement.outerHTML}
+      </div>
+    `;
+
+    // Small delay ensures the DOM is fully rendered before print dialog appears
+    setTimeout(() => {
+      window.print();
+      document.body.innerHTML = originalContent;
+      window.location.reload(); // Reload to restore React bindings
+    }, 100);
+  };
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose}></div>
+      <div className="relative w-full max-w-[700px] bg-slate-200 rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[95vh]">
+        <div className="flex items-center justify-between px-6 py-4 bg-white border-b border-gray-200 shrink-0">
+          <h3 className="text-[14px] font-black uppercase tracking-widest text-indigo-900 flex items-center"><Printer size={18} className="mr-2 text-indigo-600" /> Print Receipt</h3>
+          <div className="flex space-x-2">
+            <button onClick={handleNativePrint} className="px-6 py-2 bg-indigo-600 text-white rounded text-[10px] font-black uppercase tracking-widest shadow flex items-center"><Printer size={14} className="mr-2" /> Print</button>
+            <button onClick={onClose} className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 hover:bg-slate-200"><X size={15} strokeWidth={3} /></button>
+          </div>
+        </div>
+
+        <div className="p-4 md:p-8 overflow-y-auto custom-scrollbar flex-1 bg-slate-200 flex justify-center items-start">
+          {/* Printable Area - styled explicitly with standard CSS for printing */}
+          <div id="print-invoice-area" className="bg-white w-full max-w-[600px] shadow-sm relative p-5 md:p-6" style={{ backgroundColor: '#ffffff', color: '#000', fontFamily: 'Arial, sans-serif' }}>
+             {/* School Header */}
+             <div style={{ textAlign: 'center', marginBottom: '12px', borderBottom: '2px solid #1e3a8a', paddingBottom: '10px' }}>
+                <img src={logoImg} alt="School Logo" style={{ height: '55px', margin: '0 auto 6px auto', display: 'block' }} />
+                <h1 style={{ margin: 0, fontSize: '22px', fontWeight: '900', color: '#1e3a8a', letterSpacing: '1px' }}>LITTLE SEEDS SCHOOL</h1>
+                <p style={{ margin: '3px 0 0 0', fontSize: '11px', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Affiliated to CBSE, New Delhi</p>
+             </div>
+
+             {/* Receipt Title */}
+             <div style={{ textAlign: 'center', marginBottom: '12px' }}>
+                <span style={{ display: 'inline-block', backgroundColor: '#eef2ff', color: '#3730a3', padding: '3px 12px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1px', border: '1px solid #c7d2fe' }}>
+                  FEE RECEIPT
+                </span>
+             </div>
+
+             {/* Meta Info */}
+             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px', fontSize: '12px' }}>
+                <div>
+                   <p style={{ margin: '0 0 4px 0' }}><strong style={{ color: '#64748b' }}>Receipt No:</strong> <span style={{ fontWeight: 'bold' }}>{data.id}</span></p>
+                   <p style={{ margin: 0 }}><strong style={{ color: '#64748b' }}>Date:</strong> <span style={{ fontWeight: 'bold' }}>{data.date}</span></p>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                   <p style={{ margin: '0 0 4px 0' }}><strong style={{ color: '#64748b' }}>Academic Year:</strong> <span style={{ fontWeight: 'bold' }}>2025-26</span></p>
+                   <p style={{ margin: 0 }}><strong style={{ color: '#64748b' }}>Payment Mode:</strong> <span style={{ fontWeight: 'bold' }}>{data.method}</span></p>
+                </div>
+             </div>
+
+             {/* Student Details - 2 Columns */}
+             <div style={{ padding: '10px', borderRadius: '4px', marginBottom: '16px', border: '1px solid #cbd5e1' }}>
+               <h4 style={{ margin: '0 0 6px 0', fontSize: '11px', textTransform: 'uppercase', color: '#94a3b8', letterSpacing: '1px' }}>Student Details</h4>
+               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
+                 <div style={{ flex: 1, paddingRight: '10px' }}>
+                    <p style={{ margin: '0 0 4px 0' }}><span style={{ color: '#64748b', display: 'inline-block', width: '90px' }}>Student Name:</span> <strong style={{ color: '#0f172a' }}>{data.student}</strong></p>
+                    <p style={{ margin: 0 }}><span style={{ color: '#64748b', display: 'inline-block', width: '90px' }}>Class & Sec:</span> <strong style={{ color: '#0f172a' }}>{data.class}</strong></p>
+                 </div>
+                 <div style={{ flex: 1, paddingLeft: '10px', borderLeft: '1px solid #e2e8f0' }}>
+                    <p style={{ margin: '0 0 4px 0' }}><span style={{ color: '#64748b', display: 'inline-block', width: '90px' }}>Father's Name:</span> <strong style={{ color: '#0f172a' }}>{studentInfo.father || 'N/A'}</strong></p>
+                    <p style={{ margin: 0 }}><span style={{ color: '#64748b', display: 'inline-block', width: '90px' }}>Roll No:</span> <strong style={{ color: '#0f172a' }}>{studentInfo.roll || 'N/A'}</strong></p>
+                 </div>
+               </div>
+             </div>
+
+             {/* Fee Particulars */}
+             <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px' }}>
+                <thead>
+                   <tr>
+                     <th style={{ textAlign: 'left', padding: '8px', borderBottom: '2px solid #cbd5e1', fontSize: '11px', textTransform: 'uppercase', color: '#64748b', backgroundColor: '#f8fafc', borderTop: '1px solid #cbd5e1' }}>Particulars</th>
+                     <th style={{ textAlign: 'right', padding: '8px', borderBottom: '2px solid #cbd5e1', fontSize: '11px', textTransform: 'uppercase', color: '#64748b', backgroundColor: '#f8fafc', borderTop: '1px solid #cbd5e1' }}>Amount (INR)</th>
+                   </tr>
+                </thead>
+                <tbody>
+                   <tr>
+                     <td style={{ padding: '10px 8px', borderBottom: '1px solid #e2e8f0', fontSize: '12px', fontWeight: 'bold' }}>{data.type}</td>
+                     <td style={{ padding: '10px 8px', borderBottom: '1px solid #e2e8f0', fontSize: '12px', textAlign: 'right', fontWeight: 'bold' }}>₹{data.amount}</td>
+                   </tr>
+                </tbody>
+                <tfoot>
+                   <tr>
+                     <td style={{ padding: '10px 8px', textAlign: 'right', fontSize: '12px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1px', color: '#475569' }}>Total Amount Paid</td>
+                     <td style={{ padding: '10px 8px', textAlign: 'right', fontSize: '15px', fontWeight: '900', color: '#166534', backgroundColor: '#f0fdf4', borderTop: '2px solid #cbd5e1', borderBottom: '2px solid #cbd5e1' }}>₹{data.amount}</td>
+                   </tr>
+                </tfoot>
+             </table>
+
+             {/* Signatures */}
+             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '30px', marginBottom: '10px' }}>
+                <div style={{ textAlign: 'center' }}>
+                   <div style={{ width: '130px', borderTop: '1px solid #94a3b8', paddingTop: '4px', fontSize: '10px', color: '#475569' }}>Cashier / Clerk</div>
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                   <div style={{ width: '130px', borderTop: '1px solid #94a3b8', paddingTop: '4px', fontSize: '10px', color: '#475569' }}>Authorized Signatory</div>
+                </div>
+             </div>
+
+             {/* Footer Tagline */}
+             <div style={{ textAlign: 'center', fontSize: '9px', color: '#94a3b8', fontStyle: 'italic', paddingTop: '8px', borderTop: '1px dashed #e2e8f0' }}>
+                This is a computer generated receipt and does not require a physical signature.
+             </div>
+          </div>
         </div>
       </div>
     </div>

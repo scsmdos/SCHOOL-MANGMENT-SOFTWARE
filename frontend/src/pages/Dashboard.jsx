@@ -171,7 +171,7 @@ const Dashboard = () => {
               <h3 className="text-[14px] font-bold text-[var(--text-primary)] tracking-wide uppercase">Attendance</h3>
               <p className="text-[10px] text-[var(--text-secondary)] font-bold uppercase tracking-wider mt-0.5">Weekly Average</p>
             </div>
-            <div className="flex-1 w-full min-h-[160px] pt-2">
+            <div className="flex-1 w-full min-h-0 pt-2">
                <ResponsiveContainer width="100%" height="100%">
                  <BarChart data={attendanceData} margin={{ top: 0, right: 0, left: -25, bottom: 0 }}>
                    <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: '#71829B', fontSize: 11, fontWeight: 'bold' }} dy={10} />

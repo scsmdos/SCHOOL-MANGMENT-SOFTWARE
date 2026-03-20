@@ -83,6 +83,24 @@ const StaffManagement = () => {
     setIsModalOpen(true);
   };
 
+  const handleExportCSV = () => {
+    const headers = ['ID', 'Name', 'Role', 'Subject', 'Joined', 'Contact', 'Email', 'Status'];
+    const rows = filteredStaff.map(s => [s.id, s.name, s.role, s.subject, s.joined, s.contact, s.email, s.status]);
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(r => r.map(c => `"${c}"`).join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `staff_directory_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const handleDelete = async (rawId) => {
     if (!window.confirm('Are you sure you want to delete this staff member?')) return;
     try {
@@ -106,7 +124,10 @@ const StaffManagement = () => {
           <button onClick={fetchStaff} disabled={loading} className="flex items-center space-x-2 h-9 px-4 rounded-md border border-[var(--border-color)] dark:border-[#334155] bg-white dark:bg-[#10162A] text-[11px] font-extrabold text-[var(--text-primary)] hover:bg-gray-50 dark:hover:bg-[#1a2234] transition-colors shadow-sm disabled:opacity-50">
             <RefreshCw size={13} strokeWidth={2.5} className={`text-[#6366f1] ${loading ? 'animate-spin' : ''}`} /><span>Refresh</span>
           </button>
-          <button className="flex items-center space-x-2 h-9 px-4 rounded-md border border-[var(--border-color)] dark:border-[#334155] bg-white dark:bg-[#10162A] text-[11px] font-extrabold text-[var(--text-primary)] hover:bg-gray-50 dark:hover:bg-[#1a2234] transition-colors shadow-sm">
+          <button 
+            onClick={handleExportCSV}
+            className="flex items-center space-x-2 h-9 px-4 rounded-md border border-[var(--border-color)] dark:border-[#334155] bg-white dark:bg-[#10162A] text-[11px] font-extrabold text-[var(--text-primary)] hover:bg-gray-50 dark:hover:bg-[#1a2234] transition-colors shadow-sm"
+          >
             <Download size={13} strokeWidth={2.5} className="text-[#10b981]" /><span>Export CSV</span>
           </button>
           <button onClick={() => { setCurrentStaff(null); setIsModalOpen(true); }}
@@ -180,6 +201,7 @@ const StaffManagement = () => {
                 <th className="px-5 py-3 text-[9px] font-extrabold text-[#94a3b8] tracking-widest uppercase text-left">MEMBER</th>
                 <th className="px-5 py-3 text-[9px] font-extrabold text-[#94a3b8] tracking-widest uppercase text-left">ROLE & SUBJECT</th>
                 <th className="px-5 py-3 text-[9px] font-extrabold text-[#94a3b8] tracking-widest uppercase text-left">CONTACT</th>
+                <th className="px-5 py-3 text-[9px] font-extrabold text-[#94a3b8] tracking-widest uppercase text-left">SALARY</th>
                 <th className="px-5 py-3 text-[9px] font-extrabold text-[#94a3b8] tracking-widest uppercase text-left">STATUS</th>
                 <th className="px-5 py-3 text-[9px] font-extrabold text-[#94a3b8] tracking-widest uppercase text-right px-8">ACTIONS</th>
               </tr>
@@ -219,9 +241,12 @@ const StaffManagement = () => {
                       </div>
                     </div>
                   </td>
-                  <td className="px-5 py-1.5 whitespace-nowrap">
-                    <StatusBadge status={s.status} />
-                  </td>
+                   <td className="px-5 py-1.5 whitespace-nowrap">
+                     <p className="text-[11px] font-bold text-[#10b981]">{s.salary}</p>
+                   </td>
+                   <td className="px-5 py-1.5 whitespace-nowrap">
+                     <StatusBadge status={s.status} />
+                   </td>
                   <td className="px-5 py-1.5 whitespace-nowrap">
                     <div className="flex items-center justify-end space-x-1">
                       <button onClick={() => handleEdit(s)}
@@ -231,9 +256,6 @@ const StaffManagement = () => {
                       <button onClick={() => handleDelete(s.rawId)}
                         className="w-7 h-7 rounded flex items-center justify-center bg-white dark:bg-[#10162A] border border-gray-200 dark:border-[#334155] text-[#f43f5e] hover:bg-[#f43f5e] hover:text-white transition-all shadow-sm">
                         <Trash2 size={12} strokeWidth={2.5} />
-                      </button>
-                      <button className="w-7 h-7 rounded flex items-center justify-center bg-white dark:bg-[#10162A] border border-gray-200 dark:border-[#334155] text-[var(--text-secondary)] hover:bg-gray-100 dark:hover:bg-slate-700 transition-all shadow-sm">
-                        <MoreVertical size={12} strokeWidth={2.5} />
                       </button>
                     </div>
                   </td>
@@ -264,6 +286,13 @@ const StaffManagement = () => {
           staff={currentStaff} 
           onSave={async (data) => {
             try {
+              const cleanVal = (v) => v === 'N/A' || !v ? '' : v;
+              const cleanSalaryVal = (v) => {
+                if (!v || v === 'N/A') return null;
+                const c = String(v).replace(/[^0-9.]/g, '');
+                return c ? parseFloat(c) : null;
+              };
+
               const payload = {
                 name: data.name,
                 designation: data.subject,
@@ -271,12 +300,14 @@ const StaffManagement = () => {
                 contact_number: data.contact,
                 email: data.email,
                 status: data.status,
+                experience: cleanVal(data.experience),
+                salary: cleanSalaryVal(data.salary),
+                joining_date: cleanVal(data.joined) === '' ? null : data.joined,
+                role: data.role,
               };
               if (currentStaff) {
-                // Edit existing
                 await api.put(`/employees/${currentStaff.rawId}`, payload);
               } else {
-                // Add new
                 await api.post('/employees', payload);
               }
               setIsModalOpen(false);
@@ -319,16 +350,28 @@ const StatusBadge = ({ status }) => {
 };
 
 const StaffModal = ({ isOpen, onClose, staff, onSave }) => {
-  const [formData, setFormData] = useState(staff || {
-    name: '',
-    role: 'Teacher',
-    subject: '',
-    experience: '',
-    contact: '',
-    email: '',
-    joined: new Date().toISOString().slice(0, 10),
-    status: 'Active',
-    salary: '₹0'
+   const [formData, setFormData] = useState(() => {
+    if (!staff) return {
+      name: '',
+      role: 'Teacher',
+      subject: '',
+      experience: '',
+      contact: '',
+      email: '',
+      joined: new Date().toISOString().slice(0, 10),
+      status: 'Active',
+      salary: ''
+    };
+    
+    // Clean N/A before setting to form
+    const clean = (v) => (v === 'N/A' || v === 'Joined N/A') ? '' : v;
+    return {
+      ...staff,
+      experience: clean(staff.experience),
+      salary: clean(staff.salary),
+      joined: clean(staff.joined),
+      subject: clean(staff.subject)
+    };
   });
 
   const handleChange = (e) => {

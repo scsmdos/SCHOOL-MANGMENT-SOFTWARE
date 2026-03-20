@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { X, Upload, Camera, Lock, Loader2 } from 'lucide-react';
+import toast from 'react-hot-toast';
 import api from '../api/axios';
 import logoImg from '../assets/logo.jpeg';
 
@@ -33,31 +34,87 @@ const InputGroup = ({ label, required, placeholder, type = "text", value, name, 
   </div>
 );
 
-const SelectGroup = ({ label, required, options, name, value, onChange }) => (
-  <div className="flex flex-col">
-    <label className="text-[9px] font-bold text-[var(--text-secondary)] uppercase tracking-widest mb-1.5">
-      {label}{required && <span className="text-[#f43f5e]">*</span>}
-    </label>
-    {/* Inner wrapper for precise vertical centering of the arrow icon */}
-    <div className="relative w-full h-9">
-      <select 
-        name={name}
-        value={value || ''}
-        onChange={onChange}
-        className="w-full h-full px-3 bg-[var(--bg-main)] border border-[var(--border-color)] rounded text-[var(--text-primary)] text-[11px] font-medium focus:outline-none focus:border-[#0ea5e9] transition-colors appearance-none cursor-pointer"
-      >
-        <option value="" disabled hidden>Select {label.replace('*','')}</option>
-        {options.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
-      </select>
-      {/* Custom Dropdown Arrow precisely centered in the 36px height box */}
-      <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-[var(--text-secondary)] flex items-center justify-center">
-        <svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg">
-           <path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-        </svg>
+const SelectGroupWithCreate = ({ label, required, options, name, value, onChange, onCreateNew, saving }) => {
+  const [isAdding, setIsAdding] = useState(false);
+  const [tempValue, setTempValue] = useState('');
+
+  const handleSave = async () => {
+    if (!tempValue.trim()) return;
+    const success = await onCreateNew(tempValue.trim().toUpperCase());
+    if (success) {
+      setIsAdding(false);
+      setTempValue('');
+    }
+  };
+
+  if (isAdding) {
+    return (
+      <div className="flex flex-col">
+        <label className="text-[9px] font-bold text-[var(--text-secondary)] uppercase tracking-widest mb-1.5">
+          New {label.replace('*','')}{required && <span className="text-[#f43f5e]">*</span>}
+        </label>
+        <div className="flex space-x-1 h-9">
+          <input 
+            autoFocus
+            type="text"
+            placeholder="Class Name"
+            value={tempValue}
+            onChange={e => setTempValue(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleSave()}
+            className="flex-1 h-full px-3 rounded text-[11px] font-medium bg-[var(--bg-main)] border border-[#0ea5e9] text-[var(--text-primary)] focus:outline-none"
+          />
+          <button 
+            type="button"
+            onClick={handleSave}
+            disabled={saving}
+            className="w-9 h-9 rounded bg-[#0ea5e9] text-white flex items-center justify-center hover:bg-[#0284c7] transition-colors disabled:opacity-50 shrink-0"
+          >
+            {saving ? <Loader2 size={14} className="animate-spin" /> : <Lock size={14} />}
+          </button>
+          <button 
+            type="button"
+            onClick={() => setIsAdding(false)}
+            className="w-9 h-9 rounded bg-[var(--bg-panel-alt)] border border-[var(--border-color)] text-[var(--text-secondary)] flex items-center justify-center hover:bg-[#f43f5e] hover:text-white transition-colors shrink-0"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col">
+      <label className="text-[9px] font-bold text-[var(--text-secondary)] uppercase tracking-widest mb-1.5">
+        {label}{required && <span className="text-[#f43f5e]">*</span>}
+      </label>
+      <div className="relative w-full h-9">
+        <select 
+          name={name}
+          value={value || ''}
+          onChange={(e) => {
+            if (e.target.value === '___ADD_NEW___') {
+              setIsAdding(true);
+            } else {
+              onChange(e);
+            }
+          }}
+          className="w-full h-full px-3 bg-[var(--bg-main)] border border-[var(--border-color)] rounded text-[var(--text-primary)] text-[11px] font-medium focus:outline-none focus:border-[#0ea5e9] transition-colors appearance-none cursor-pointer"
+        >
+          <option value="" disabled hidden>Select {label.replace('*','')}</option>
+          {options.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
+          <option value="" disabled>──────────</option>
+          <option value="___ADD_NEW___" className="font-bold text-[#0ea5e9] bg-[#f0f9ff]">＋ Add New Class</option>
+        </select>
+        <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-[var(--text-secondary)] flex items-center justify-center">
+          <svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg">
+             <path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </div>
       </div>
     </div>
-  </div>
-);
+  );
+};
 
 const AdmissionFormModal = ({ isOpen, onClose, onSuccess, editData }) => {
   const [parentPhoto, setParentPhoto] = useState(null);
@@ -65,6 +122,8 @@ const AdmissionFormModal = ({ isOpen, onClose, onSuccess, editData }) => {
   const parentPhotoRef = React.useRef(null);
   const studentPhotoRef = React.useRef(null);
   const [loading, setLoading] = useState(false);
+  const [classes, setClasses] = useState([]);
+  const [classSaving, setClassSaving] = useState(false);
 
   const initialFormState = {
     date_of_admission: new Date().toISOString().split('T')[0],
@@ -85,6 +144,7 @@ const AdmissionFormModal = ({ isOpen, onClose, onSuccess, editData }) => {
     state: '',
     pin_code: '',
     contact_no: '',
+    parent_email: '',
     aadhaar_no: '',
     father_qualification: '',
     mother_qualification: '',
@@ -97,8 +157,16 @@ const AdmissionFormModal = ({ isOpen, onClose, onSuccess, editData }) => {
 
   const [formData, setFormData] = useState(initialFormState);
 
+  const fetchClasses = React.useCallback(async () => {
+    try {
+      const res = await api.get('/classes-list');
+      setClasses(res.data || []);
+    } catch (e) { console.error('Error fetching dashboard initial data:', e); }
+  }, []);
+
   React.useEffect(() => {
     if (isOpen) {
+      fetchClasses();
       if (editData) {
         // Pre-fill from existing admission data (backend field names -> form field names)
         setFormData({
@@ -120,6 +188,7 @@ const AdmissionFormModal = ({ isOpen, onClose, onSuccess, editData }) => {
           state: editData.state || '',
           pin_code: editData.pin_code || '',
           contact_no: editData.contact_no || '',
+          parent_email: editData.parent_email || '',
           aadhaar_no: editData.aadhaar_no || '',
           father_qualification: editData.qualification_father || editData.father_qualification || '',
           mother_qualification: editData.qualification_mother || editData.mother_qualification || '',
@@ -137,7 +206,24 @@ const AdmissionFormModal = ({ isOpen, onClose, onSuccess, editData }) => {
       if (parentPhotoRef.current) parentPhotoRef.current.value = '';
       if (studentPhotoRef.current) studentPhotoRef.current.value = '';
     }
-  }, [isOpen, editData]);
+  }, [isOpen, editData, fetchClasses]);
+
+  const handleCreateClass = async (name) => {
+    if (!name) return false;
+    setClassSaving(true);
+    try {
+      await api.post('/academic-classes', { name: name.trim().toUpperCase() });
+      await fetchClasses();
+      setFormData(prev => ({ ...prev, admitted_into_class: name.trim().toUpperCase() }));
+      toast.success(`Class ${name.trim().toUpperCase()} created successfully!`);
+      return true;
+    } catch (err) {
+      toast.error('Error creating class: ' + (err.response?.data?.message || err.message));
+      return false;
+    } finally {
+      setClassSaving(false);
+    }
+  };
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -152,7 +238,7 @@ const AdmissionFormModal = ({ isOpen, onClose, onSuccess, editData }) => {
 
   const handleSave = async () => {
     if (!formData.student_name || !formData.father_name || !formData.date_of_birth || !formData.admitted_into_class || !formData.contact_no) {
-      alert("Please fill all required fields marked with *");
+      toast.error("Please fill all required fields marked with *");
       return;
     }
 
@@ -182,9 +268,10 @@ const AdmissionFormModal = ({ isOpen, onClose, onSuccess, editData }) => {
       }
       
       if (onSuccess) onSuccess();
+      toast.success(editData?.rawId ? 'Admission updated successfully!' : 'Admission saved successfully!');
       onClose();
     } catch (err) {
-      alert('Failed to save admission: ' + (err.response?.data?.message || err.message));
+      toast.error('Failed to save admission: ' + (err.response?.data?.message || err.message));
     } finally {
       setLoading(false);
     }
@@ -217,61 +304,10 @@ const AdmissionFormModal = ({ isOpen, onClose, onSuccess, editData }) => {
           </button>
         </div>
 
-        {/* Modal Body (Scrollable) */}
         <div className="flex-1 overflow-y-auto p-6 md:p-8 custom-scrollbar relative bg-[var(--bg-panel)] transition-colors">
-          
           {/* Top Row - Photos and Admission Info */}
           <div className="flex flex-col md:flex-row justify-between space-y-4 md:space-y-0 md:space-x-6 mb-2">
              
-             {/* Parent Photo Dotted Box */}
-              <div 
-                className="w-[110px] h-[110px] shrink-0 border border-dashed border-[var(--border-color)] bg-[var(--bg-main)] rounded flex flex-col items-center justify-center cursor-pointer hover:bg-[var(--bg-panel-alt)] transition-colors group shadow-sm overflow-hidden relative"
-                onClick={() => parentPhotoRef.current?.click()}
-              >
-                {parentPhoto ? (
-                  <img src={URL.createObjectURL(parentPhoto)} alt="Parent" className="w-full h-full object-cover" />
-                ) : editData?.parent_photo ? (
-                  <img src={getPhotoSrc(editData.parent_photo)} alt="Parent" className="w-full h-full object-cover" onError={(e) => { e.target.style.display = 'none'; }} />
-                ) : (
-                  <>
-                    <Upload size={18} strokeWidth={2} className="text-[var(--text-secondary)] mb-2 group-hover:text-[#0ea5e9] transition-colors" />
-                    <span className="text-[8px] font-bold text-[var(--text-secondary)] group-hover:text-[var(--text-primary)] text-center uppercase tracking-widest leading-relaxed">Parents<br/>Photo</span>
-                  </>
-                )}
-                <input type="file" accept="image/*" className="hidden" ref={parentPhotoRef} onChange={(e) => handlePhotoUpload(e, setParentPhoto)} />
-              </div>
-
-             {/* Admission Info Wrapper Box */}
-             <div className="flex-1 border border-[var(--border-color)] bg-[var(--bg-panel-alt)] rounded-lg p-5 flex flex-col justify-center shadow-sm relative transition-colors">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                   
-                   <div className="flex flex-col">
-                      <label className="text-[9px] font-bold text-[var(--text-secondary)] uppercase tracking-widest mb-1.5">Admission / Receipt No.</label>
-                      <div className="h-9 px-3 border border-dashed border-[#64748b] dark:border-[#334155] rounded flex justify-center items-center bg-[var(--bg-panel)] shadow-sm">
-                        <span className="text-[var(--text-primary)] text-[11px] font-bold tracking-widest">ADM-2026-20950</span>
-                      </div>
-                   </div>
-
-                   <InputGroup 
-                     label="Date of Admission" 
-                     type="date" 
-                     name="date_of_admission"
-                     value={formData.date_of_admission}
-                     onChange={handleChange}
-                   />
-
-                   <SelectGroup 
-                     label="Admitted Into Class" 
-                     required 
-                     name="admitted_into_class"
-                     value={formData.admitted_into_class}
-                     onChange={handleChange}
-                     options={['PLAY', 'LKG', 'UKG', 'CLASS 1', 'CLASS 2', 'CLASS 3']} 
-                   />
-
-                </div>
-             </div>
-
              {/* Student Photo Dotted Box */}
               <div 
                 className="w-[110px] h-[110px] shrink-0 border border-dashed border-[var(--border-color)] bg-[var(--bg-main)] rounded flex flex-col items-center justify-center cursor-pointer hover:bg-[var(--bg-panel-alt)] transition-colors group shadow-sm overflow-hidden relative"
@@ -290,6 +326,55 @@ const AdmissionFormModal = ({ isOpen, onClose, onSuccess, editData }) => {
                 <input type="file" accept="image/*" className="hidden" ref={studentPhotoRef} onChange={(e) => handlePhotoUpload(e, setStudentPhoto)} />
               </div>
 
+             {/* Admission Info Wrapper Box */}
+              <div className="flex-1 border border-[var(--border-color)] bg-[var(--bg-panel-alt)] rounded-lg p-5 flex flex-col justify-center shadow-sm relative transition-colors">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                   
+                   <div className="flex flex-col">
+                      <label className="text-[9px] font-bold text-[var(--text-secondary)] uppercase tracking-widest mb-1.5">Admission / Receipt No.</label>
+                      <div className="h-9 px-3 border border-dashed border-[#64748b] dark:border-[#334155] rounded flex justify-center items-center bg-[var(--bg-panel)] shadow-sm">
+                        <span className="text-[var(--text-primary)] text-[11px] font-bold tracking-widest">ADM-2026-20950</span>
+                      </div>
+                   </div>
+
+                   <InputGroup 
+                     label="Date of Admission" 
+                     type="date" 
+                     name="date_of_admission"
+                     value={formData.date_of_admission}
+                     onChange={handleChange}
+                   />
+
+                   <SelectGroupWithCreate 
+                     label="Admitted Into Class" 
+                     required 
+                     name="admitted_into_class"
+                     value={formData.admitted_into_class}
+                     onChange={handleChange}
+                     options={classes} 
+                     onCreateNew={handleCreateClass}
+                     saving={classSaving}
+                   />
+                </div>
+              </div>
+
+             {/* Parent Photo Dotted Box */}
+              <div 
+                className="w-[110px] h-[110px] shrink-0 border border-dashed border-[var(--border-color)] bg-[var(--bg-main)] rounded flex flex-col items-center justify-center cursor-pointer hover:bg-[var(--bg-panel-alt)] transition-colors group shadow-sm overflow-hidden relative"
+                onClick={() => parentPhotoRef.current?.click()}
+              >
+                {parentPhoto ? (
+                  <img src={URL.createObjectURL(parentPhoto)} alt="Parent" className="w-full h-full object-cover" />
+                ) : editData?.parent_photo ? (
+                  <img src={getPhotoSrc(editData.parent_photo)} alt="Parent" className="w-full h-full object-cover" onError={(e) => { e.target.style.display = 'none'; }} />
+                ) : (
+                  <>
+                    <Upload size={18} strokeWidth={2} className="text-[var(--text-secondary)] mb-2 group-hover:text-[#0ea5e9] transition-colors" />
+                    <span className="text-[8px] font-bold text-[var(--text-secondary)] group-hover:text-[var(--text-primary)] text-center uppercase tracking-widest leading-relaxed">Parents<br/>Photo</span>
+                  </>
+                )}
+                <input type="file" accept="image/*" className="hidden" ref={parentPhotoRef} onChange={(e) => handlePhotoUpload(e, setParentPhoto)} />
+              </div>
           </div>
 
           <SectionHeader title="Student Personal Information" />
@@ -319,8 +404,9 @@ const AdmissionFormModal = ({ isOpen, onClose, onSuccess, editData }) => {
           </div>
 
           <SectionHeader title="Verification Details" />
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-4">
              <InputGroup label="Contact No. (Primary)" required placeholder="Mobile Number" name="contact_no" value={formData.contact_no} onChange={handleChange} />
+             <InputGroup label="Parent's Email ID" placeholder="Required for Parent App Credential" name="parent_email" value={formData.parent_email} onChange={handleChange} />
              <InputGroup label="Aadhaar No." placeholder="12 Digit Number" name="aadhaar_no" value={formData.aadhaar_no} onChange={handleChange} />
           </div>
 
@@ -342,10 +428,10 @@ const AdmissionFormModal = ({ isOpen, onClose, onSuccess, editData }) => {
         </div>
 
         {/* Modal Footer */}
-        <div className="bg-white border-t border-gray-200 p-4 px-6 flex justify-end items-center shrink-0">
+        <div className="bg-[var(--bg-panel-alt)] border-t border-[var(--border-color)] p-4 px-6 flex justify-end items-center shrink-0 transition-colors">
            <button 
              onClick={onClose} 
-             className="px-6 py-2.5 rounded border border-gray-300 text-[10px] font-bold text-gray-700 uppercase tracking-widest mr-3 hover:bg-gray-50 transition-colors"
+             className="px-6 py-2.5 rounded border border-[var(--border-color)] text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-widest mr-3 hover:bg-[var(--bg-main)] hover:text-[var(--text-primary)] transition-colors"
            >
              Cancel
            </button>
@@ -363,5 +449,30 @@ const AdmissionFormModal = ({ isOpen, onClose, onSuccess, editData }) => {
     </div>
   );
 };
+
+// Re-defining SelectGroup for other fields to avoid breaking them
+const SelectGroup = ({ label, required, options, name, value, onChange }) => (
+  <div className="flex flex-col">
+    <label className="text-[9px] font-bold text-[var(--text-secondary)] uppercase tracking-widest mb-1.5">
+      {label}{required && <span className="text-[#f43f5e]">*</span>}
+    </label>
+    <div className="relative w-full h-9">
+      <select 
+        name={name}
+        value={value || ''}
+        onChange={onChange}
+        className="w-full h-full px-3 bg-[var(--bg-main)] border border-[var(--border-color)] rounded text-[var(--text-primary)] text-[11px] font-medium focus:outline-none focus:border-[#0ea5e9] transition-colors appearance-none cursor-pointer"
+      >
+        <option value="" disabled hidden>Select {label.replace('*','')}</option>
+        {options.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
+      </select>
+      <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-[var(--text-secondary)] flex items-center justify-center">
+        <svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg">
+           <path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </div>
+    </div>
+  </div>
+);
 
 export default AdmissionFormModal;

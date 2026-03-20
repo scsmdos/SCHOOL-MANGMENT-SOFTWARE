@@ -90,7 +90,19 @@ const DocumentManagement = () => {
   const filteredData = students.filter(s => {
     const matchesSearch = s.name.toLowerCase().includes(search.toLowerCase()) || 
                          s.admNo.toLowerCase().includes(search.toLowerCase());
-    return matchesSearch;
+    
+    let matchesStatus = true;
+    const pendingCount = s.docs.filter(d => d.status === 'Pending').length;
+    
+    if (statusFilter === 'Pending') {
+      matchesStatus = pendingCount > 0;
+    } else if (statusFilter === 'Verified') {
+      matchesStatus = pendingCount === 0 && s.docs.length > 0;
+    } else if (statusFilter === 'No Documents') {
+      matchesStatus = s.docs.length === 0;
+    }
+
+    return matchesSearch && matchesStatus;
   });
 
   const totalDocs = students.reduce((acc, s) => acc + s.docs.length, 0);
@@ -205,6 +217,7 @@ const DocumentManagement = () => {
               <option>All</option>
               <option>Pending</option>
               <option>Verified</option>
+              <option>No Documents</option>
             </select>
           </div>
         </div>
@@ -248,7 +261,9 @@ const DocumentManagement = () => {
                     </td>
                     <td className="px-5 py-1.5 text-center">
                       <div className="flex justify-center">
-                        {pendingCount > 0 ? (
+                        {s.docs.length === 0 ? (
+                          <span className="w-[100px] py-0.5 text-[9px] font-black rounded border border-rose-200 bg-rose-50 dark:bg-rose-900/20 text-rose-600 uppercase tracking-widest text-center">No Document</span>
+                        ) : pendingCount > 0 ? (
                           <span className="w-[100px] py-0.5 text-[9px] font-black rounded border border-amber-200 bg-amber-50 dark:bg-amber-900/20 text-amber-600 uppercase tracking-widest text-center">{pendingCount} Pending</span>
                         ) : (
                           <span className="w-[100px] py-0.5 text-[9px] font-black rounded border border-emerald-200 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 uppercase tracking-widest flex items-center justify-center space-x-1"><CheckCircle2 size={10} /> <span>All Done</span></span>
@@ -416,7 +431,7 @@ const ViewModal = ({ isOpen, onClose, student, onDelete, onToggleVerify, setPrev
                        {doc.expiry !== '-' && (
                          <>
                             <span className="text-slate-400 opacity-30">|</span>
-                            <span className="text-orange-500/80">Exp: {doc.expiry}</span>
+                            <span className="text-orange-500/80">Sub: {doc.expiry}</span>
                          </>
                        )}
                        <span className="ml-1 italic text-slate-400 font-medium normal-case opacity-70">Ok</span>
@@ -585,7 +600,7 @@ const UploadModal = ({ isOpen, onClose, students, selectedStudentId, onUpload })
                              placeholder="e.g. Rahul_Aadhaar" className="w-full h-9 px-3 bg-white dark:bg-[#0f172a] border border-gray-200 dark:border-white/10 rounded-lg text-[11px] font-bold text-[var(--text-primary)] dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-600 focus:outline-none focus:border-orange-500/50 transition-all" />
                         </div>
                         <div className="space-y-1">
-                           <label className="text-[9px] font-black text-gray-500 dark:text-slate-400 uppercase tracking-widest ml-1">EXPIRY DATE</label>
+                           <label className="text-[9px] font-black text-gray-500 dark:text-slate-400 uppercase tracking-widest ml-1">SUBMISSION DATE</label>
                            <div className="relative">
                               <Calendar size={13} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500" />
                               <input type="date" value={row.expiry} onChange={e => updateRow(row.id, 'expiry', e.target.value)}

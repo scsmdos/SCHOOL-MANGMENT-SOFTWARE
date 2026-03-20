@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { User, Lock, Eye, EyeOff, LogIn, ShieldCheck, ArrowRight, RefreshCw } from 'lucide-react';
 import api from '../api/axios';
-import logoImg from '../assets/logo.jpeg'; 
+import toast from 'react-hot-toast';
+import logoImg from '../assets/logo.png'; 
 
 const Login = () => {
     const [email, setEmail] = useState('littleseeds@gmail.com');
@@ -21,12 +22,18 @@ const Login = () => {
             if (res.data.success) {
                 localStorage.setItem('token', res.data.token);
                 localStorage.setItem('admin', JSON.stringify(res.data.admin));
+                toast.success('Welcome back, Admin!', {
+                  icon: '👋',
+                  duration: 4000,
+                });
                 setTimeout(() => {
                     window.location.href = '/admin/dashboard';
-                }, 500);
+                }, 800);
             }
         } catch (err) {
-            setError(err.response?.data?.message || 'Invalid credentials.');
+            const msg = err.response?.data?.message || 'Invalid credentials.';
+            setError(msg);
+            toast.error(msg);
         } finally {
             setLoading(false);
         }

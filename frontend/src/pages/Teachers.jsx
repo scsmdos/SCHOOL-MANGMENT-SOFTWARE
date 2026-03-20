@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Download, Search, Eye, Edit, Trash2, Plus, RefreshCw, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
+import toast from 'react-hot-toast';
 import AddStaffModal from '../components/AddStaffModal';
 import ViewTeacherModal from '../components/ViewTeacherModal';
 import EditTeacherModal from '../components/EditTeacherModal';
@@ -81,11 +82,22 @@ const Teachers = () => {
   };
 
   const handleExportCSV = () => {
+    if (filtered.length === 0) {
+      toast.error('No data to export');
+      return;
+    }
     const headers = ['EMP ID', 'Name', 'Gender', 'Designation', 'Department', 'Phone', 'Email', 'Status', 'Joined'];
     const rows = filtered.map(t => [t.id, t.name, t.gender, t.designation, t.department, t.phone, t.email, t.status, t.joined]);
     const csv = [headers, ...rows].map(r => r.map(c => `"${c}"`).join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'teachers.csv'; a.click();
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `teachers_${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    toast.success('Teachers directory exported!');
   };
 
   return (

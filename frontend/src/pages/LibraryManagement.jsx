@@ -148,7 +148,7 @@ const LibraryManagement = () => {
         api.get('/library-digital-assets')
       ]);
 
-      setBooks((bookRes.data?.data ?? bookRes.data ?? []).map(b => ({
+      const allBooks = (bookRes.data?.data ?? bookRes.data ?? []).map(b => ({
         id: b.book_id ?? `BK-${b.id}`,
         rawId: b.id,
         title: b.title ?? 'N/A',
@@ -160,21 +160,25 @@ const LibraryManagement = () => {
         isbn: b.isbn ?? 'N/A',
         publisher: b.publisher ?? 'N/A',
         status: b.status ?? 'Available',
-      })));
+      }));
+      setBooks(allBooks);
 
-      setCirculation((circRes.data?.data ?? circRes.data ?? []).map(c => ({
-        id: c.issue_id ?? `ISS-${c.id}`,
-        rawId: c.id,
-        bookId: c.book_id,
-        bookTitle: c.book_title ?? 'Book Title',
-        issuedTo: c.issued_to_name ?? 'N/A',
-        role: c.user_type ?? 'Student',
-        outDate: c.issue_date,
-        dueDate: c.due_date,
-        returnDate: c.return_date,
-        status: c.status ?? 'Issued',
-        overdueDays: 0 // Logic to calculate if needed
-      })));
+      setCirculation((circRes.data?.data ?? circRes.data ?? []).map(c => {
+        const book = allBooks.find(b => b.id === c.book_id);
+        return {
+          id: c.issue_id ?? `ISS-${c.id}`,
+          rawId: c.id,
+          bookId: c.book_id,
+          bookTitle: book ? book.title : (c.book_title ?? 'Unknown Book'),
+          issuedTo: c.issued_to_name ?? 'N/A',
+          role: c.user_type ?? 'Student',
+          outDate: c.issue_date,
+          dueDate: c.due_date,
+          returnDate: c.return_date,
+          status: c.status ?? 'Issued',
+          overdueDays: 0
+        };
+      }));
 
       setMedia((medRes.data?.data ?? medRes.data ?? []).map(m => ({
         id: m.asset_id ?? `RES-${m.id}`,
@@ -183,6 +187,7 @@ const LibraryManagement = () => {
         type: m.category ?? 'Digital Resource',
         format: m.format ?? 'PDF',
         size: m.size ?? '0 KB',
+        link: m.link ?? '',
         addedDate: m.created_at?.split('T')[0] ?? '2026-03-18'
       })));
 
@@ -485,14 +490,14 @@ const LibraryManagement = () => {
                         
                         {/* Dropdown Menu */}
                         {openMenuId === item.id && (
-                          <div className="absolute right-0 mt-1 w-36 bg-[var(--bg-panel-alt)] border border-[var(--border-color)] dark:border-white/10 rounded-xl shadow-xl z-20 py-1.5 animate-in fade-in slide-in-from-top-2 duration-200">
-                             <button className="w-full px-3 py-2 text-left text-[11px] font-bold text-[var(--text-primary)] hover:bg-gray-100 dark:hover:bg-white/5 flex items-center space-x-2">
-                                <Eye size={14} className="text-blue-500" /> <span>View Details</span>
+                          <div className="absolute right-0 mt-1 w-40 bg-[var(--bg-panel-alt)] border border-[var(--border-color)] dark:border-white/10 rounded-xl shadow-xl z-20 py-1.5 animate-in fade-in slide-in-from-top-2 duration-200">
+                              <button onClick={() => { setOpenMenuId(null); if(item.link) { window.open(item.link, '_blank'); } else { alert('\u26a0 Is PDF ka file server pe nahi hai.\n\nYe purani entry hai. Is item ko DELETE karo aur phir "Add E-Resource" button se dobara PDF upload karo. Naya upload hone ke baad View/Download seedha kaam karega!'); } }} className="w-full px-3 py-2 text-left text-[11px] font-bold text-[var(--text-primary)] hover:bg-gray-100 dark:hover:bg-white/5 flex items-center space-x-2">
+                                <Eye size={14} className="text-blue-500" /> <span>View / Open</span>
                              </button>
-                             <button className="w-full px-3 py-2 text-left text-[11px] font-bold text-[var(--text-primary)] hover:bg-gray-100 dark:hover:bg-white/5 flex items-center space-x-2">
+                              <button onClick={() => { setOpenMenuId(null); if(item.link) { window.open(item.link, '_blank'); } else { alert('\u26a0 Download ke liye file server pe honi chahiye.\n\nYe purani entry hai. Is item ko DELETE karo phir dobara upload karo!'); } }} className="w-full px-3 py-2 text-left text-[11px] font-bold text-[var(--text-primary)] hover:bg-gray-100 dark:hover:bg-white/5 flex items-center space-x-2">
                                 <Download size={14} className="text-emerald-500" /> <span>Download</span>
                              </button>
-                             <button className="w-full px-3 py-2 text-left text-[11px] font-bold text-[var(--text-primary)] hover:bg-gray-100 dark:hover:bg-white/5 flex items-center space-x-2">
+                              <button onClick={() => { setOpenMenuId(null); if(item.link) { navigator.clipboard.writeText(item.link); alert('✅ Link copied!'); } else { alert('⚠️ Is item ka koi link nahi hai.\n\nIs item ko DELETE karke dobara PDF upload karo!'); } }} className="w-full px-3 py-2 text-left text-[11px] font-bold text-[var(--text-primary)] hover:bg-gray-100 dark:hover:bg-white/5 flex items-center space-x-2">
                                 <Share2 size={14} className="text-cyan-500" /> <span>Share Link</span>
                              </button>
                              <div className="h-[1px] bg-[var(--border-color)] dark:bg-white/10 my-1 mx-2"></div>
@@ -551,6 +556,8 @@ const LibraryManagement = () => {
           isOpen={true} 
           onClose={closeModal} 
           onSuccess={fetchData}
+          books={books}
+          circulation={circulation}
         />
       )}
 
@@ -640,7 +647,7 @@ const AddBookModal = ({ isOpen, onClose, book, onSuccess }) => {
   );
 };
 
-const IssueBookModal = ({ isOpen, onClose, onSuccess }) => {
+const IssueBookModal = ({ isOpen, onClose, onSuccess, books, circulation }) => {
   const [mode, setMode] = useState('issue'); // 'issue' or 'return'
   const [formData, setFormData] = useState({
     issue_id: `ISS-${Math.floor(Math.random() * 10000)}`,
@@ -653,6 +660,31 @@ const IssueBookModal = ({ isOpen, onClose, onSuccess }) => {
   });
 
   const [returnId, setReturnId] = useState('');
+  
+  // Dropdown states
+  const [students, setStudents] = useState([]);
+  const [showUserDropdown, setShowUserDropdown] = useState(false);
+  const [showBookDropdown, setShowBookDropdown] = useState(false);
+  const [showReturnDropdown, setShowReturnDropdown] = useState(false);
+
+  useEffect(() => {
+    api.get('/students-for-dropdown').then(res => setStudents(res.data?.data || res.data || [])).catch(e => console.error(e));
+  }, []);
+
+  const filteredStudents = students.filter(s => 
+    (s.student_name && s.student_name.toLowerCase().includes(formData.issued_to_name.toLowerCase())) ||
+    (s.id && s.id.toString().includes(formData.issued_to_name))
+  );
+
+  const filteredBooks = books.filter(b => 
+    b.title.toLowerCase().includes(formData.book_id.toLowerCase()) || 
+    b.id.toLowerCase().includes(formData.book_id.toLowerCase())
+  );
+
+  const filteredCirculation = circulation.filter(c => 
+    c.status !== 'Returned' && 
+    (c.id.toLowerCase().includes(returnId.toLowerCase()) || c.bookId.toLowerCase().includes(returnId.toLowerCase()))
+  );
 
   const handleSubmit = async () => {
     try {
@@ -676,7 +708,7 @@ const IssueBookModal = ({ isOpen, onClose, onSuccess }) => {
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-      <div className="bg-[var(--bg-panel-alt)] w-full max-w-[600px] rounded-2xl border border-[var(--border-color)] dark:border-white/10 shadow-2xl overflow-hidden animate-in zoom-in duration-200">
+      <div className="bg-[var(--bg-panel-alt)] w-full max-w-[600px] rounded-2xl border border-[var(--border-color)] dark:border-white/10 shadow-2xl animate-in zoom-in duration-200">
         
         {/* Header */}
         <div className="px-6 py-4 border-b border-[var(--border-color)] dark:border-white/10 flex items-center justify-between bg-indigo-50 dark:bg-indigo-500/5">
@@ -699,10 +731,72 @@ const IssueBookModal = ({ isOpen, onClose, onSuccess }) => {
         <div className="p-6 space-y-6">
            {mode === 'issue' ? (
              <>
-               <div className="grid grid-cols-2 gap-5">
-                  <InputField label="STUDENT / MEMBER ID" icon={UserCheck} placeholder="e.g. STU-101" value={formData.issued_to_id} onChange={v => setFormData({...formData, issued_to_id: v})} />
-                  <InputField label="BOOK ID / ISBN" icon={Book} placeholder="e.g. B-001" value={formData.book_id} onChange={v => setFormData({...formData, book_id: v})} />
-                  <InputField label="ISSUED TO (NAME)" icon={User} placeholder="Full Name" value={formData.issued_to_name} onChange={v => setFormData({...formData, issued_to_name: v})} />
+               <div className="grid grid-cols-2 gap-5 overflow-visible">
+                  
+                  {/* Dynamic User Dropdown */}
+                  <div className="relative">
+                    <label className="text-[9px] font-black text-[var(--text-secondary)] uppercase tracking-widest mb-1.5 ml-1">ISSUED TO (STUDENT/STAFF)</label>
+                    <div className="relative isolate flex items-center">
+                      <User size={14} className="absolute left-3 text-slate-400 z-10" />
+                      <input 
+                        type="text"
+                        placeholder="Type Name or ID..."
+                        value={formData.issued_to_name}
+                        onChange={e => { setFormData({...formData, issued_to_name: e.target.value}); setShowUserDropdown(true); }}
+                        onFocus={() => setShowUserDropdown(true)}
+                        onBlur={() => setTimeout(() => setShowUserDropdown(false), 200)}
+                        className="w-full h-10 pl-9 pr-3 bg-white dark:bg-[#1e293b] border border-[var(--border-color)] dark:border-white/10 rounded-lg text-[11px] font-bold text-[var(--text-primary)] focus:border-indigo-500 transition-colors z-0"
+                      />
+                    </div>
+                    {showUserDropdown && filteredStudents.length > 0 && (
+                      <div className="absolute top-[100%] left-0 w-full mt-1 bg-white dark:bg-[#1e293b] shadow-2xl border border-[var(--border-color)] dark:border-white/10 rounded-lg max-h-60 overflow-y-auto z-[9999] custom-scrollbar">
+                        {filteredStudents.slice(0, 50).map((s, i) => (
+                          <div 
+                            key={i} 
+                            onClick={() => { setFormData({...formData, issued_to_name: s.student_name, issued_to_id: s.id.toString(), user_type: 'Student'}); setShowUserDropdown(false); }}
+                            className="px-3 py-2 border-b border-gray-100 dark:border-white/5 cursor-pointer hover:bg-indigo-50 dark:hover:bg-indigo-500/10"
+                          >
+                            <p className="text-[11px] font-bold text-[var(--text-primary)]">{s.student_name} <span className="text-[9px] text-slate-500 ml-1">({s.admitted_into_class || 'Class N/A'})</span></p>
+                            <p className="text-[9px] font-medium text-slate-500 mt-0.5">ID: {s.id}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Dynamic Book Dropdown */}
+                  <div className="relative">
+                    <label className="text-[9px] font-black text-[var(--text-secondary)] uppercase tracking-widest mb-1.5 ml-1">BOOK ID / TITLE</label>
+                    <div className="relative isolate flex items-center">
+                      <Book size={14} className="absolute left-3 text-slate-400 z-10" />
+                      <input 
+                        type="text"
+                        placeholder="Type Book Title or ID..."
+                        value={formData.book_id}
+                        onChange={e => { setFormData({...formData, book_id: e.target.value}); setShowBookDropdown(true); }}
+                        onFocus={() => setShowBookDropdown(true)}
+                        onBlur={() => setTimeout(() => setShowBookDropdown(false), 200)}
+                        className="w-full h-10 pl-9 pr-3 bg-white dark:bg-[#1e293b] border border-[var(--border-color)] dark:border-white/10 rounded-lg text-[11px] font-bold text-[var(--text-primary)] focus:border-indigo-500 transition-colors z-0"
+                      />
+                    </div>
+                    {showBookDropdown && filteredBooks.length > 0 && (
+                      <div className="absolute top-[100%] left-0 w-full mt-1 bg-white dark:bg-[#1e293b] shadow-2xl border border-[var(--border-color)] dark:border-white/10 rounded-lg max-h-60 overflow-y-auto z-[9999] custom-scrollbar">
+                        {filteredBooks.slice(0, 50).map((b, i) => (
+                          <div 
+                            key={i} 
+                            onClick={() => { setFormData({...formData, book_id: b.id}); setShowBookDropdown(false); }}
+                            className="px-3 py-2 border-b border-gray-100 dark:border-white/5 cursor-pointer hover:bg-indigo-50 dark:hover:bg-indigo-500/10"
+                          >
+                            <p className="text-[11px] font-bold text-[var(--text-primary)]">{b.title} <span className="text-[9px] text-indigo-500 ml-1">{b.availableUnits} left</span></p>
+                            <p className="text-[9px] font-medium text-slate-500 mt-0.5">{b.id} • {b.author}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <InputField label="STUDENT / MEMBER ID (AUTO-FILLED)" icon={UserCheck} placeholder="Auto-filled" value={formData.issued_to_id} onChange={v => setFormData({...formData, issued_to_id: v})} />
+
                   <div className="flex flex-col">
                      <label className="text-[9px] font-black text-[var(--text-secondary)] uppercase tracking-widest mb-1.5 ml-1">USER TYPE</label>
                      <select 
@@ -718,7 +812,7 @@ const IssueBookModal = ({ isOpen, onClose, onSuccess }) => {
                   <InputField label="ISSUE DATE" icon={Calendar} type="date" value={formData.issue_date} onChange={v => setFormData({...formData, issue_date: v})} />
                   <InputField label="RETURN DEADLINE" icon={History} type="date" value={formData.due_date} onChange={v => setFormData({...formData, due_date: v})} />
                </div>
-               <button onClick={handleSubmit} className="w-full flex items-center justify-center space-x-2 px-8 h-11 bg-indigo-500 hover:bg-indigo-600 text-white text-[11px] font-black rounded-xl shadow-lg shadow-indigo-500/40 transition-all uppercase tracking-widest group">
+               <button onClick={handleSubmit} className="w-full mt-4 flex items-center justify-center space-x-2 px-8 h-11 bg-indigo-500 hover:bg-indigo-600 text-white text-[11px] font-black rounded-xl shadow-lg shadow-indigo-500/40 transition-all uppercase tracking-widest group">
                  <Send size={14} className="group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
                  <span>Confirm Issue</span>
                </button>
@@ -734,7 +828,37 @@ const IssueBookModal = ({ isOpen, onClose, onSuccess }) => {
                       <p className="text-[11px] leading-relaxed text-amber-700/80 dark:text-amber-400/60 font-medium mt-1">Provide the **Issue ID** or **Book ID** to process an immediate return and release the asset.</p>
                    </div>
                 </div>
-                <InputField label="ISSUE ID OR BOOK ID" icon={Hash} placeholder="e.g. ISS-123 or BK-101" value={returnId} onChange={setReturnId} />
+
+                <div className="relative">
+                  <label className="text-[9px] font-black text-[var(--text-secondary)] uppercase tracking-widest mb-1.5 ml-1">ISSUE ID OR BOOK ID (ACTIVE ISSUANCES)</label>
+                  <div className="relative isolate flex items-center">
+                    <Hash size={14} className="absolute left-3 text-slate-400 z-10" />
+                    <input 
+                      type="text"
+                      placeholder="Type Book ID or Title..."
+                      value={returnId}
+                      onChange={e => { setReturnId(e.target.value); setShowReturnDropdown(true); }}
+                      onFocus={() => setShowReturnDropdown(true)}
+                      onBlur={() => setTimeout(() => setShowReturnDropdown(false), 200)}
+                      className="w-full h-10 pl-9 pr-3 bg-white dark:bg-[#1e293b] border border-[var(--border-color)] dark:border-white/10 rounded-lg text-[11px] font-bold text-[var(--text-primary)] focus:border-emerald-500 transition-colors z-0"
+                    />
+                  </div>
+                  {showReturnDropdown && filteredCirculation.length > 0 && (
+                    <div className="absolute top-[100%] left-0 w-full mt-1 bg-white dark:bg-[#1e293b] shadow-2xl border border-[var(--border-color)] dark:border-white/10 rounded-lg max-h-60 overflow-y-auto z-[9999] custom-scrollbar">
+                      {filteredCirculation.slice(0, 50).map((c, i) => (
+                        <div 
+                          key={i} 
+                          onClick={() => { setReturnId(c.id); setShowReturnDropdown(false); }}
+                          className="px-3 py-2 border-b border-gray-100 dark:border-white/5 cursor-pointer hover:bg-emerald-50 dark:hover:bg-emerald-500/10"
+                        >
+                          <p className="text-[11px] font-bold text-[var(--text-primary)]">{c.bookTitle} <span className="text-[9px] text-emerald-500 ml-1">Issue: {c.id}</span></p>
+                          <p className="text-[9px] font-medium text-slate-500 mt-0.5">Issued To: {c.issuedTo}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
                 <button onClick={handleSubmit} className="w-full flex items-center justify-center space-x-2 px-8 h-11 bg-emerald-500 hover:bg-emerald-600 text-white text-[11px] font-black rounded-xl shadow-lg shadow-emerald-500/40 transition-all uppercase tracking-widest">
                    <XCircle size={14} />
                    <span>Process Return Now</span>
@@ -748,40 +872,67 @@ const IssueBookModal = ({ isOpen, onClose, onSuccess }) => {
 };
 
 const AddMediaModal = ({ isOpen, onClose, onSuccess }) => {
-  const [formData, setFormData] = useState({
-    asset_id: `RES-${Math.floor(Math.random() * 10000)}`,
-    title: '',
-    category: 'Video Lecture',
-    format: 'MP4',
-    size: '0 KB',
-    link: ''
-  });
+  const [title, setTitle] = useState('');
   const [selectedFile, setSelectedFile] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [error, setError] = useState('');
   const fileInputRef = useRef(null);
 
+  const MAX_SIZE_MB = 150;
+
   const handleFileChange = (e) => {
+    setError('');
     const file = e.target.files[0];
-    if (file) {
-      setSelectedFile(file);
-      setFormData({...formData, size: (file.size / 1024 / 1024).toFixed(2) + ' MB', format: file.name.split('.').pop().toUpperCase()});
+    if (!file) return;
+    if (file.type !== 'application/pdf') {
+      setError('❌ Only PDF files are allowed!');
+      return;
     }
+    if (file.size > MAX_SIZE_MB * 1024 * 1024) {
+      setError(`❌ File too large! Max size is ${MAX_SIZE_MB}MB. Your file: ${(file.size/1024/1024).toFixed(1)}MB`);
+      return;
+    }
+    setSelectedFile(file);
+    if (!title) setTitle(file.name.replace('.pdf', ''));
   };
 
   const handleSubmit = async () => {
-    if (!formData.title) return alert('Title is required');
+    if (!title.trim()) return setError('❌ Please enter a title!');
+    if (!selectedFile) return setError('❌ Please select a PDF file!');
+    setError('');
     setIsUploading(true);
+    setUploadProgress(0);
     try {
-      // For media, we should ideally use FormData if uploading file, but here we'll just save metadata
-      await api.post('/library-digital-assets', formData);
+      // Step 1: Upload the actual PDF file
+      const formDataUpload = new FormData();
+      formDataUpload.append('pdf', selectedFile);
+      const uploadRes = await api.post('/library-pdf-upload', formDataUpload, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        onUploadProgress: (e) => {
+          const pct = Math.round((e.loaded / e.total) * 100);
+          setUploadProgress(pct);
+        },
+      });
+      const fileUrl = uploadRes.data.link;
+      const fileSize = uploadRes.data.size;
+
+      // Step 2: Save metadata with the actual link
+      await api.post('/library-digital-assets', {
+        title: title.trim(),
+        category: 'PDF Document',
+        format: 'PDF',
+        size: fileSize,
+        link: fileUrl,
+      });
+
       onSuccess();
       onClose();
-    } catch (err) { alert('Upload failed: ' + err.message); }
-    finally { setIsUploading(false); }
-  };
-
-  const handleUploadClick = () => {
-    fileInputRef.current?.click();
+    } catch (err) {
+      setError('❌ Upload failed: ' + (err.response?.data?.error || err.message));
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   return (
@@ -792,93 +943,94 @@ const AddMediaModal = ({ isOpen, onClose, onSuccess }) => {
         <div className="px-6 py-4 border-b border-[var(--border-color)] dark:border-white/10 flex items-center justify-between bg-cyan-50 dark:bg-cyan-500/5">
           <div className="flex items-center space-x-3">
              <div className="w-10 h-10 rounded-xl bg-cyan-500 text-white flex items-center justify-center shadow-lg shadow-cyan-500/30">
-                <Video size={20} />
+                <FileText size={20} />
              </div>
              <div>
-                <h3 className="text-[15px] font-black text-[var(--text-primary)] uppercase tracking-tight">Upload E-Resource</h3>
-                <p className="text-[10px] font-bold text-cyan-600 dark:text-cyan-400/70 uppercase tracking-widest">Digital Asset Management</p>
+                <h3 className="text-[15px] font-black text-[var(--text-primary)] uppercase tracking-tight">Upload PDF Resource</h3>
+                <p className="text-[10px] font-bold text-cyan-600 dark:text-cyan-400/70 uppercase tracking-widest">Only PDF • Max 150MB</p>
              </div>
           </div>
           <button onClick={onClose} className="w-8 h-8 rounded-full hover:bg-gray-200 dark:hover:bg-white/10 flex items-center justify-center text-[var(--text-secondary)] transition-colors"><X size={18} /></button>
         </div>
 
-        <div className="p-6 space-y-6">
-           <div className="grid grid-cols-2 gap-4">
-              <InputField label="RESOURCE TITLE" icon={Monitor} placeholder="e.g. Python Course" value={formData.title} onChange={v => setFormData({...formData, title: v})} />
-              <div className="flex flex-col">
-                 <label className="text-[9px] font-black text-[var(--text-secondary)] uppercase tracking-widest mb-1.5 ml-1">CONTENT TYPE</label>
-                 <select 
-                   value={formData.category}
-                   onChange={e => setFormData({...formData, category: e.target.value})}
-                   className="h-10 px-3 bg-white dark:bg-[#1e293b] border border-[var(--border-color)] dark:border-white/10 rounded-lg text-[11px] font-bold text-[var(--text-primary)] outline-none focus:border-cyan-500 transition-colors"
-                 >
-                    <option className="bg-white dark:bg-[#1e293b]">Video Lecture</option>
-                    <option className="bg-white dark:bg-[#1e293b]">PDF Document</option>
-                    <option className="bg-white dark:bg-[#1e293b]">Audio Clip</option>
-                    <option className="bg-white dark:bg-[#1e293b]">Courseware</option>
-                 </select>
+        <div className="p-6 space-y-5">
+          <InputField label="DOCUMENT TITLE" icon={FileText} placeholder="e.g. Class 10 Science Notes" value={title} onChange={setTitle} />
+
+          {error && (
+            <div className="px-4 py-3 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 rounded-xl text-[11px] font-bold text-rose-600 dark:text-rose-400">{error}</div>
+          )}
+
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileChange}
+            className="hidden"
+            accept=".pdf,application/pdf"
+          />
+
+          <div
+            onClick={() => !isUploading && fileInputRef.current?.click()}
+            className={`border-2 border-dashed ${selectedFile ? 'border-cyan-500 bg-cyan-500/5' : 'border-[var(--border-color)] dark:border-white/10'} rounded-2xl p-8 flex flex-col items-center justify-center group hover:border-cyan-500 transition-all cursor-pointer relative`}
+          >
+            {selectedFile ? (
+              <>
+                <div className="w-12 h-12 rounded-full bg-cyan-500 text-white flex items-center justify-center mb-3">
+                   <FileText size={24} />
+                </div>
+                <p className="text-[12px] font-black text-[var(--text-primary)] text-center line-clamp-1 px-10">{selectedFile.name}</p>
+                <p className="text-[10px] font-bold text-cyan-500 uppercase tracking-tight mt-1">{(selectedFile.size / 1024 / 1024).toFixed(2)} MB • PDF • READY</p>
+                {!isUploading && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setSelectedFile(null); setError(''); }}
+                    className="absolute top-3 right-3 w-6 h-6 rounded-full bg-rose-500 text-white flex items-center justify-center hover:scale-110 transition-transform shadow-lg"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </>
+            ) : (
+              <>
+                <div className="w-12 h-12 rounded-full bg-cyan-500/10 text-cyan-500 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                   <FileUp size={24} />
+                </div>
+                <p className="text-[12px] font-black text-[var(--text-primary)]">Click to Select PDF</p>
+                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-tight mt-1">PDF Only • Max 150MB</p>
+              </>
+            )}
+          </div>
+
+          {/* Upload Progress */}
+          {isUploading && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-black text-cyan-500 uppercase tracking-widest">Uploading...</span>
+                <span className="text-[10px] font-black text-[var(--text-primary)]">{uploadProgress}%</span>
               </div>
-           </div>
+              <div className="w-full h-2 bg-gray-100 dark:bg-white/5 rounded-full overflow-hidden">
+                <div className="h-full bg-gradient-to-r from-cyan-400 to-cyan-600 rounded-full transition-all duration-300" style={{ width: `${uploadProgress}%` }}></div>
+              </div>
+            </div>
+          )}
 
-           <input 
-             type="file" 
-             ref={fileInputRef} 
-             onChange={handleFileChange} 
-             className="hidden" 
-             accept=".mp4,.pdf,.mp3,.zip"
-           />
-
-           <div 
-             onClick={handleUploadClick}
-             className={`border-2 border-dashed ${selectedFile ? 'border-cyan-500 bg-cyan-500/5' : 'border-[var(--border-color)] dark:border-white/10'} rounded-2xl p-8 flex flex-col items-center justify-center group hover:border-cyan-500 transition-all cursor-pointer relative transition-all`}
-           >
-              {selectedFile ? (
-                 <>
-                    <div className="w-12 h-12 rounded-full bg-cyan-500 text-white flex items-center justify-center mb-3">
-                       <FileText size={24} />
-                    </div>
-                    <p className="text-[12px] font-black text-[var(--text-primary)] text-center line-clamp-1 px-10">{selectedFile.name}</p>
-                    <p className="text-[10px] font-bold text-cyan-500 uppercase tracking-tight mt-1">{(selectedFile.size / 1024 / 1024).toFixed(2)} MB • READY TO UPLOAD</p>
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); setSelectedFile(null); }}
-                      className="absolute top-3 right-3 w-6 h-6 rounded-full bg-rose-500 text-white flex items-center justify-center hover:scale-110 transition-transform shadow-lg"
-                    >
-                       <X size={14} />
-                    </button>
-                 </>
-              ) : (
-                 <>
-                    <div className="w-12 h-12 rounded-full bg-cyan-500/10 text-cyan-500 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-                       <FileUp size={24} />
-                    </div>
-                    <p className="text-[12px] font-black text-[var(--text-primary)]">Click to Upload File</p>
-                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-tight mt-1">MP4, PDF, MP3 (Max 200MB)</p>
-                 </>
-              )}
-           </div>
-
-           <div className="flex items-center justify-end space-x-3">
-              <button disabled={isUploading} onClick={onClose} className="px-6 h-10 text-[11px] font-black text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors uppercase tracking-widest">Cancel</button>
-              <button 
-                onClick={handleSubmit}
-                disabled={!selectedFile || isUploading}
-                className={`px-8 h-10 bg-cyan-500 hover:bg-cyan-600 text-white text-[11px] font-black rounded-lg shadow-lg shadow-cyan-500/40 transition-all uppercase tracking-widest flex items-center space-x-2 ${(!selectedFile || isUploading) ? 'opacity-50 cursor-not-allowed' : ''}`}
-              >
-                 {isUploading ? (
-                    <>
-                       <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                       <span>Uploading...</span>
-                    </>
-                 ) : (
-                    <span>Upload Resource</span>
-                 )}
-              </button>
-           </div>
+          <div className="flex items-center justify-end space-x-3 pt-1">
+            <button disabled={isUploading} onClick={onClose} className="px-6 h-10 text-[11px] font-black text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors uppercase tracking-widest">Cancel</button>
+            <button
+              onClick={handleSubmit}
+              disabled={!selectedFile || isUploading}
+              className={`px-8 h-10 bg-cyan-500 hover:bg-cyan-600 text-white text-[11px] font-black rounded-lg shadow-lg shadow-cyan-500/40 transition-all uppercase tracking-widest flex items-center space-x-2 ${(!selectedFile || isUploading) ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              {isUploading
+                ? <><div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin"></div><span>Uploading...</span></>
+                : <><FileUp size={14} /><span>Upload PDF</span></>
+              }
+            </button>
+          </div>
         </div>
       </div>
     </div>
   );
 };
+
 
 /* ── HELPER COMPONENTS ── */
 
@@ -924,4 +1076,6 @@ const TabItem = ({ active, label, icon: Icon, onClick }) => (
   </button>
 );
 
+
 export default LibraryManagement;
+

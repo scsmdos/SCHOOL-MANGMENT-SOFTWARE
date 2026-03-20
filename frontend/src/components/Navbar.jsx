@@ -89,7 +89,7 @@ const Navbar = () => {
 
         {/* Profile */}
         <div className="flex items-center space-x-2 cursor-pointer">
-           <div className="w-8 h-8 rounded bg-[#3525E7] flex items-center justify-center text-white font-bold text-[11px]">
+           <div className="w-8 h-8 rounded-full bg-[#3525E7] flex items-center justify-center text-white font-bold text-[11px]">
              {getInitials(admin?.name)}
            </div>
            <div className="text-left flex flex-col justify-center">

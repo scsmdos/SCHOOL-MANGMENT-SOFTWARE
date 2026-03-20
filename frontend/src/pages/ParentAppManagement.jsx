@@ -55,6 +55,8 @@ const ParentAppManagement = () => {
         pin: p.pin ?? '****',
         lastActive: p.last_login ?? 'Never',
         status: p.status ?? 'Active',
+        photoUrl: p.photo_url || null,
+        email: p.email || '',
       }));
       setParents(list);
     } catch (err) {
@@ -90,6 +92,16 @@ const ParentAppManagement = () => {
       alert('Error updating PIN: ' + (err.response?.data?.message || err.message));
     } finally {
       setResetting(false);
+    }
+  };
+
+  const handleToggleStatus = async (parent) => {
+    const newStatus = parent.status === 'Active' ? 'Blocked' : 'Active';
+    try {
+      await api.put(`/parent-accounts/${parent.rawId}`, { status: newStatus });
+      fetchParents();
+    } catch (err) {
+      alert('Error updating status: ' + (err.response?.data?.message || err.message));
     }
   };
 
@@ -182,42 +194,49 @@ const ParentAppManagement = () => {
                      <th className="px-6 py-2 text-[10px] font-black text-slate-500 uppercase tracking-widest">PARENT DETAILS</th>
                      <th className="px-6 py-2 text-[10px] font-black text-slate-500 uppercase tracking-widest">LINKED STUDENT(S)</th>
                      <th className="px-6 py-2 text-[10px] font-black text-slate-500 uppercase tracking-widest">LOGIN APP ID</th>
-                     <th className="px-6 py-2 text-[10px] font-black text-slate-500 uppercase tracking-widest">LAST ACTIVE</th>
-                     <th className="px-6 py-2 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">STATUS</th>
+                     <th className="px-6 py-2 text-[10px] font-black text-slate-500 uppercase tracking-widest text-center">LAST ACTIVE</th>
+                     <th className="px-6 py-2 text-[10px] font-black text-slate-500 uppercase tracking-widest text-center">STATUS</th>
                      <th className="px-6 py-2 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">ADMIN CONTROLS</th>
                    </tr>
                  </thead>                 <tbody className="divide-y divide-[var(--border-color)] dark:divide-white/5">
                    {filteredParents.map((parent) => (
-                     <tr key={parent.id} className="hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors group">
-                       <td className="px-6 py-2.5">
+                     <tr key={parent.id} className="border-b border-[var(--border-color)] dark:border-white/5 hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors group">
+                       <td className="px-6 py-2">
                          <div className="flex items-center space-x-3">
-                            <div className="w-8 h-8 rounded-full bg-indigo-500/10 text-indigo-500 flex items-center justify-center font-black text-[12px] border border-indigo-500/20 group-hover:bg-indigo-500 group-hover:text-white transition-colors">
-                               {parent.avatar}
+                            <div className="w-8 h-8 rounded-full bg-indigo-500/10 text-indigo-500 flex items-center justify-center overflow-hidden border border-indigo-500/20">
+                               {parent.photoUrl ? (
+                                  <img src={parent.photoUrl} alt="Avatar" className="w-full h-full object-cover" />
+                               ) : (
+                                  <img src={`https://ui-avatars.com/api/?name=${parent.name}&background=6366f1&color=fff`} className="w-full h-full object-cover" alt="Profile" />
+                               )}
                             </div>
                             <div>
                                <p className="text-[12px] font-black text-[var(--text-primary)] uppercase tracking-tight">{parent.name}</p>
-                               <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mt-0.5">{parent.id} • {parent.relation}</p>
+                               <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mt-0.5">{parent.relation}</p>
                             </div>
                          </div>
                        </td>
-                       <td className="px-6 py-2.5">
+                       <td className="px-6 py-2">
                          <div className="inline-flex items-center space-x-2 px-2 py-1 rounded bg-blue-500/10 border border-blue-500/20 text-blue-600 dark:text-blue-400">
                             <GraduationCap size={12} />
                             <span className="text-[10px] font-bold uppercase">{parent.student}</span>
                          </div>
                        </td>
-                       <td className="px-6 py-2.5">
+                       <td className="px-6 py-2">
                          <p className="text-[12px] font-black text-[var(--text-primary)]">{parent.loginId}</p>
                          <p className="text-[9px] font-bold text-slate-500 mt-0.5 uppercase">Initial PIN: <span className="text-[var(--text-primary)]">{parent.pin}</span></p>
                        </td>
-                       <td className="px-6 py-2.5">
+                       <td className="px-6 py-2 text-center">
                          <span className="text-[10px] font-black uppercase text-emerald-500 tracking-widest">{parent.lastActive}</span>
                        </td>
-                       <td className="px-6 py-2.5 text-right">
+                       <td className="px-6 py-2 text-center">
+                         <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${parent.status === 'Active' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>{parent.status}</span>
+                       </td>
+                       <td className="px-6 py-2 text-right">
                           <div className="flex items-center justify-end space-x-1 font-extrabold uppercase tracking-widest text-[9px]">
-                             <button className="w-8 h-8 rounded bg-gray-100 dark:bg-white/5 flex items-center justify-center text-slate-500 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-500/10 transition-colors" title="Message"><Mail size={13} strokeWidth={2.5}/></button>
+                             <a href={`mailto:${parent.email || 'parent@school.com'}?subject=Your App Login Details&body=Hello ${parent.name},%0D%0A%0D%0AYour Parent App Login ID is: ${parent.loginId}%0D%0AYour PIN is: ${parent.pin}%0D%0A%0D%0APlease download the app and login!`} className="w-8 h-8 rounded bg-gray-100 dark:bg-white/5 flex items-center justify-center text-slate-500 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-500/10 transition-colors" title="Email Login Details"><Mail size={13} strokeWidth={2.5}/></a>
                              <button onClick={() => setSelectedParent(parent)} className="w-8 h-8 rounded bg-gray-100 dark:bg-white/5 flex items-center justify-center text-slate-500 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-500/10 transition-colors" title="Change PIN"><Key size={13} strokeWidth={2.5}/></button>
-                             <button className="w-8 h-8 rounded bg-gray-100 dark:bg-white/5 flex items-center justify-center text-slate-500 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors" title="Block Account"><Lock size={13} strokeWidth={2.5}/></button>
+                             <button onClick={() => handleToggleStatus(parent)} className={`w-8 h-8 rounded bg-gray-100 dark:bg-white/5 flex items-center justify-center transition-colors ${parent.status === 'Active' ? 'text-slate-500 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10' : 'text-rose-500 bg-rose-50 dark:bg-rose-500/10 hover:text-emerald-500'}`} title={parent.status === 'Active' ? 'Block Account' : 'Unblock Account'}><Lock size={13} strokeWidth={2.5}/></button>
                           </div>
                         </td>
                       </tr>

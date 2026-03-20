@@ -1,7 +1,9 @@
-import React, { useEffect } from 'react';
-import { X, GraduationCap } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { X, GraduationCap, Loader2, Plus } from 'lucide-react';
+import toast from 'react-hot-toast';
+import api from '../api/axios';
 
-const EditStudentModal = ({ isOpen, onClose, data }) => {
+const EditStudentModal = ({ isOpen, onClose, data, onSaved }) => {
   // Prevent scrolling on body when modal is open
   useEffect(() => {
     if (isOpen) {
@@ -14,9 +16,81 @@ const EditStudentModal = ({ isOpen, onClose, data }) => {
     };
   }, [isOpen]);
 
+  const student = data || {};
+
+  const [section, setSection] = useState(student.section || 'A');
+  const [roll, setRoll] = useState(student.roll_no || student.roll_number || '');
+  const [routeId, setRouteId] = useState(student.transport_route_id || '');
+  const [routes, setRoutes] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [sections, setSections] = useState([]);
+  const [isAddingSection, setIsAddingSection] = useState(false);
+  const [newSectionName, setNewSectionName] = useState('');
+  const [sectionSaving, setSectionSaving] = useState(false);
+
+  useEffect(() => {
+    const fetchRoutes = async () => {
+      try {
+        const res = await api.get('/transport-routes');
+        setRoutes(res.data?.data ?? res.data ?? []);
+      } catch (err) { console.error('Routes fetch error:', err); }
+    };
+    const fetchSections = async () => {
+      try {
+        const res = await api.get('/sections-list');
+        setSections(res.data || []);
+      } catch (err) { console.error('Sections fetch error:', err); }
+    };
+    if (isOpen) {
+      fetchRoutes();
+      fetchSections();
+    }
+  }, [isOpen]);
+
+  // Sync state if student data changes
+  useEffect(() => {
+    setSection(student.section || 'A');
+    setRoll(student.roll_no || student.roll_number || '');
+    setRouteId(student.transport_route_id || '');
+  }, [student.section, student.roll_no, student.roll_number, student.transport_route_id]);
+
   if (!isOpen) return null;
 
-  const student = data || {};
+  const handleSave = async () => {
+    setLoading(true);
+    try {
+      await api.put(`/admissions/${student.rawId}`, { 
+        section, 
+        roll_no: roll,
+        transport_route_id: routeId 
+      });
+      toast.success("Profile updated successfully!");
+      if (onSaved) onSaved();
+      onClose();
+    } catch (err) {
+      toast.error("Error saving: " + (err.response?.data?.message || err.message));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCreateSection = async () => {
+    if (!newSectionName.trim()) return;
+    setSectionSaving(true);
+    try {
+      await api.post('/sections', { name: newSectionName.trim().toUpperCase() });
+      const res = await api.get('/sections-list');
+      setSections(res.data || []);
+      setSection(newSectionName.trim().toUpperCase());
+      setIsAddingSection(false);
+      setNewSectionName('');
+      toast.success("Section created successfully!");
+    } catch (err) {
+      toast.error("Error creating section: " + (err.response?.data?.message || err.message));
+    } finally {
+      setSectionSaving(false);
+    }
+  };
   
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -141,15 +215,15 @@ const EditStudentModal = ({ isOpen, onClose, data }) => {
              </p>
           </div>
 
-          {/* Edit Section Added Here */}
           <div className="flex flex-col md:flex-row gap-4 mb-4">
             <div className="flex-1 bg-gray-50 dark:bg-transparent border border-gray-200 dark:border-[#334155] flex items-center justify-between px-4 py-2 rounded transition-colors">
-              <span className="text-[10px] font-bold text-[#64748b] tracking-widest uppercase">Set Section:</span>
+              <span className="text-[10px] font-bold text-[#64748b] tracking-widest uppercase">Transport Route:</span>
               <div className="relative">
-                <select className="bg-white dark:bg-[#10162A] border border-gray-300 dark:border-[#475569] text-[var(--text-primary)] text-xs font-bold px-3 py-1.5 pr-8 rounded appearance-none focus:outline-none focus:border-[#0ea5e9] transition-colors">
-                  <option value="A">Section A</option>
-                  <option value="B">Section B</option>
-                  <option value="C">Section C</option>
+                <select value={routeId} onChange={(e) => setRouteId(e.target.value)} className="bg-white dark:bg-[#10162A] border border-gray-300 dark:border-[#475569] text-[var(--text-primary)] text-xs font-bold px-3 py-1.5 pr-8 rounded appearance-none focus:outline-none focus:border-[#0ea5e9] transition-colors max-w-[150px]">
+                  <option value="">None</option>
+                  {routes.map(r => (
+                    <option key={r.id} value={r.id}>{r.route_name || r.name || `Route ${r.id}`}</option>
+                  ))}
                 </select>
                 <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-gray-500 dark:text-white">
                   <svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -160,12 +234,48 @@ const EditStudentModal = ({ isOpen, onClose, data }) => {
             </div>
 
             <div className="flex-1 bg-gray-50 dark:bg-transparent border border-gray-200 dark:border-[#334155] flex items-center justify-between px-4 py-2 rounded transition-colors">
-              <span className="text-[10px] font-bold text-[#64748b] tracking-widest uppercase">Set Roll Number:</span>
-              <input 
-                type="text" 
-                placeholder="Ex: 001" 
-                className="bg-white dark:bg-[#10162A] border border-gray-300 dark:border-[#475569] text-[var(--text-primary)] text-xs font-bold px-3 py-1.5 w-24 rounded focus:outline-none focus:border-[#0ea5e9] placeholder:text-gray-400 transition-colors"
-              />
+              <span className="text-[10px] font-bold text-[#64748b] tracking-widest uppercase shrink-0">Section & Roll:</span>
+              <div className="flex items-center space-x-2">
+                {isAddingSection ? (
+                  <div className="flex items-center space-x-1">
+                    <input 
+                      autoFocus
+                      type="text"
+                      placeholder="New..."
+                      value={newSectionName}
+                      onChange={e => setNewSectionName(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && handleCreateSection()}
+                      className="bg-white dark:bg-[#10162A] border border-[#0ea5e9] text-[var(--text-primary)] text-[10px] font-bold px-2 py-1 rounded w-16 focus:outline-none"
+                    />
+                    <button onClick={handleCreateSection} disabled={sectionSaving} className="p-1 bg-[#0ea5e9] text-white rounded">
+                      {sectionSaving ? <Loader2 size={10} className="animate-spin" /> : <Plus size={10} />}
+                    </button>
+                    <button onClick={() => setIsAddingSection(false)} className="p-1 bg-gray-200 dark:bg-[#334155] text-gray-500 rounded">
+                      <X size={10} />
+                    </button>
+                  </div>
+                ) : (
+                  <select 
+                    value={section} 
+                    onChange={(e) => {
+                      if (e.target.value === 'ADD_NEW') setIsAddingSection(true);
+                      else setSection(e.target.value);
+                    }} 
+                    className="bg-white dark:bg-[#10162A] border border-gray-300 dark:border-[#475569] text-[var(--text-primary)] text-xs font-bold px-2 py-1.5 rounded focus:outline-none min-w-[50px]"
+                  >
+                    {[...new Set(['A', 'B', 'C', 'D', ...sections])].map(s => <option key={s} value={s}>{s}</option>)}
+                    <option value="" disabled>───</option>
+                    <option value="ADD_NEW" className="text-[#0ea5e9] font-bold">+ New</option>
+                  </select>
+                )}
+                <input 
+                  type="text" 
+                  placeholder="Roll" 
+                  value={roll}
+                  onChange={(e) => setRoll(e.target.value)}
+                  className="bg-white dark:bg-[#10162A] border border-gray-300 dark:border-[#475569] text-[var(--text-primary)] text-xs font-bold px-3 py-1.5 w-16 rounded focus:outline-none focus:border-[#0ea5e9]"
+                />
+              </div>
             </div>
           </div>
 
@@ -173,15 +283,18 @@ const EditStudentModal = ({ isOpen, onClose, data }) => {
           <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200 dark:border-[#334155] transition-colors">
             <button 
               onClick={onClose}
+              disabled={loading}
               className="px-6 py-2 border border-[#334155] bg-transparent text-[#94a3b8] rounded text-xs font-bold hover:bg-gray-100 dark:hover:bg-[#334155] transition-colors"
             >
               CANCEL
             </button>
             <button 
-              onClick={onClose}
-              className="px-6 py-2 bg-[#84cc16] hover:bg-[#65a30d] text-white rounded text-xs font-bold shadow-sm transition-colors"
+              onClick={handleSave}
+              disabled={loading}
+              className="px-6 py-2 bg-[#84cc16] hover:bg-[#65a30d] text-white rounded text-xs font-bold shadow-sm transition-colors flex items-center"
             >
-              SAVE CHANGES
+              {loading && <Loader2 size={14} className="animate-spin mr-2" />}
+              {loading ? 'SAVING...' : 'SAVE CHANGES'}
             </button>
           </div>
 

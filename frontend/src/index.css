@@ -28,6 +28,20 @@
     --card-shadow: none;
   }
 
+  /* Global dark mode overrides for form elements */
+  .dark select, 
+  .dark option,
+  .dark input,
+  .dark textarea {
+    background-color: var(--bg-panel-alt);
+    color: var(--text-primary);
+  }
+
+  .dark select option {
+    background-color: var(--bg-panel) !important;
+    color: var(--text-primary) !important;
+  }
+
   body {
     background-color: var(--bg-main);
     color: var(--text-primary);

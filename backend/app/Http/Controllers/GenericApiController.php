@@ -7,6 +7,7 @@ use Illuminate\Support\Str;
 use Exception;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Mail;
 
 class GenericApiController extends Controller
 {
@@ -47,7 +48,7 @@ class GenericApiController extends Controller
             'transport-routes', 'transport-vehicles', 'transport-drivers',
             'communication-messages', 'communication-logs', 'parent-accounts',
             'library-issuances', 'library-books', 'library-digital-assets', 'homework', 'student-attendance',
-            'academic-calendar'
+            'academic-calendar', 'parent-events', 'student-leaves'
         ];
 
         if (!in_array($resource, $allowedResources)) {
@@ -56,6 +57,12 @@ class GenericApiController extends Controller
         }
 
         $modelName = Str::studly(Str::singular($resource));
+        
+        // Manual mapping for certain pluralization edge cases
+        if ($resource === 'student-leaves') {
+            $modelName = 'StudentLeave';
+        }
+
         $modelClass = "\\App\\Models\\{$modelName}";
 
         if (class_exists($modelClass)) {
@@ -65,7 +72,7 @@ class GenericApiController extends Controller
         return null;
     }
 
-    public function index($resource)
+    public function index(Request $request, $resource)
     {
         $model = $this->getModel($resource);
 
@@ -74,9 +81,40 @@ class GenericApiController extends Controller
         }
 
         try {
-            // Use limit to prevent Out Of Memory crashes on very large tables
-            $items = $model::orderBy('id', 'desc')->limit(1500)->get();
-            return response()->json($this->transformData($items));
+            $query = $model::orderBy('id', 'desc');
+
+            // --- Server-side Searching ---
+            if ($request->has('search') && !empty($request->search)) {
+                $search = $request->search;
+                $columns = Schema::getColumnListing($model->getTable());
+                $query->where(function($q) use ($columns, $search) {
+                    foreach ($columns as $column) {
+                        $q->orWhere($column, 'like', '%' . $search . '%');
+                    }
+                });
+            }
+
+            // --- Server-side Filtering per Field ---
+            foreach ($request->all() as $key => $value) {
+                if (in_array($key, ['page', 'per_page', 'search', 'order_by', 'order_dir'])) continue;
+                if (Schema::hasColumn($model->getTable(), $key) && !empty($value) && $value !== 'All') {
+                    $query->where($key, $value);
+                }
+            }
+
+            // --- Pagination ---
+            if ($request->has('page') || $request->has('per_page')) {
+                $perPage = $request->get('per_page', 15);
+                $items = $query->paginate($perPage);
+                // Transform data within the paginator
+                $items->getCollection()->transform(fn($item) => $this->transformData($item));
+            } else {
+                // If no pagination requested, limit to 1500 for safety but return as standard array
+                $items = $query->limit(1500)->get();
+                $items = $this->transformData($items);
+            }
+
+            return response()->json($items);
         } catch (\Exception $e) {
             \Illuminate\Support\Facades\Log::error("Generic API Fetch Error [{$resource}]: " . $e->getMessage());
             return response()->json(['error' => $e->getMessage()], 500);
@@ -147,6 +185,7 @@ class GenericApiController extends Controller
                 'library-books'     => ['field' => 'book_id',      'prefix' => 'BK-'],
                 'library-issuances' => ['field' => 'issue_id',     'prefix' => 'ISS-'],
                 'library-digital-assets' => ['field' => 'asset_id', 'prefix' => 'RES-'],
+                'parent-events'     => ['field' => 'event_id',     'prefix' => 'PE-'],
             ];
 
             if (isset($idFieldMap[$resource])) {
@@ -172,8 +211,8 @@ class GenericApiController extends Controller
 
             $item = $model::create($data);
 
-            // ── AUTO-CREATE PARENT ACCOUNT FOR NEW ADMISSIONS ──
-            if ($resource === 'admissions') {
+            // ── AUTO-CREATE PARENT ACCOUNT WHEN ADMISSION IS APPROVED ──
+            if ($resource === 'admissions' && isset($item->status) && $item->status === 'Approved') {
                 try {
                     $login_id = $item->contact_no;
                     if ($login_id) {
@@ -185,11 +224,48 @@ class GenericApiController extends Controller
                                 'relation'     => $item->father_name ? 'Father' : 'Mother',
                                 'student_name' => trim(($item->student_name ?? 'Student') . ' (' . ($item->admitted_into_class ?? 'N/A') . ')'),
                                 'login_id'     => $login_id,
-                                'pin'          => (string)rand(1000, 9999), 
+                                'pin'          => ($tempPin = (string)rand(1000, 9999)), 
                                 'status'       => 'Active',
                                 'last_login'   => 'Never Logged In',
                             ]);
                             \Illuminate\Support\Facades\Log::info("Auto-created parent account for: {$login_id}");
+
+                            // ── SEND WELCOME EMAIL ──
+                            if (!empty($item->parent_email)) {
+                                $pin = $tempPin ?? (string)rand(1000, 9999);
+                                try {
+                                    $html = "
+                                    <div style='font-family: sans-serif; color: #333; max-width: 600px; margin: auto; border: 1px solid #eee; padding: 20px; border-radius: 10px;'>
+                                        <div style='text-align: center; margin-bottom: 20px;'>
+                                            <img src='https://littleseeds.org.in/logo.png' alt='School Logo' style='height: 60px;' />
+                                        </div>
+                                        <h2 style='color: #0ea5e9; text-align: center;'>Welcome to Little Seeds School!</h2>
+                                        <p>Dear Parent,</p>
+                                        <p>Congratulations! Your child <strong>{$item->student_name}</strong>'s admission has been approved successfully.</p>
+                                        <p>You can now access the <strong>Parent Mobile App</strong> to track your child's progress, attendance, and fees.</p>
+                                        <div style='background: #f0f9ff; padding: 15px; border-radius: 8px; margin: 20px 0;'>
+                                            <p style='margin: 0;'><strong>Your Login Credentials:</strong></p>
+                                            <p style='margin: 5px 0;'>User ID: <span style='color: #0369a1; font-weight: bold;'>$login_id</span></p>
+                                            <p style='margin: 5px 0;'>Initial PIN: <span style='color: #0369a1; font-weight: bold;'>$pin</span></p>
+                                        </div>
+                                        <p>For security reasons, please change your PIN after first login.</p>
+                                        <p style='font-size: 12px; color: #666; margin-top: 30px; border-t: 1px solid #eee; padding-top: 10px;'>
+                                            Best Regards,<br/><strong>Little Seeds School Administration</strong><br/>
+                                            Contact: info@littleseeds.org.in
+                                        </p>
+                                    </div>";
+
+                                    Mail::send([], [], function($message) use ($item, $html) {
+                                        $message->to($item->parent_email)
+                                                ->subject('Welcome to Little Seeds School - Parent App Credentials')
+                                                ->from(config('mail.from.address'), config('mail.from.name'))
+                                                ->html($html);
+                                    });
+                                    \Illuminate\Support\Facades\Log::info("Welcome email sent to: {$item->parent_email}");
+                                } catch (\Exception $eEmail) {
+                                    \Illuminate\Support\Facades\Log::error("Failed to send welcome email: " . $eEmail->getMessage());
+                                }
+                            }
                         }
                     }
                 } catch (\Exception $exParent) {
@@ -243,6 +319,69 @@ class GenericApiController extends Controller
             }
 
             $item->update($data);
+
+            // ── AUTO-CREATE PARENT ACCOUNT WHEN ADMISSION IS APPROVED ──
+            if ($resource === 'admissions' && isset($item->status) && $item->status === 'Approved') {
+                try {
+                    $login_id = $item->contact_no;
+                    if ($login_id) {
+                        $exists = \App\Models\ParentAccount::where('login_id', $login_id)->exists();
+                        if (!$exists) {
+                            \App\Models\ParentAccount::create([
+                                'parent_id'    => 'P' . str_pad($item->id, 4, '0', STR_PAD_LEFT),
+                                'parent_name'  => $item->father_name ?: ($item->mother_name ?: 'Parent'),
+                                'relation'     => $item->father_name ? 'Father' : 'Mother',
+                                'student_name' => trim(($item->student_name ?? 'Student') . ' (' . ($item->admitted_into_class ?? 'N/A') . ')'),
+                                'login_id'     => $login_id,
+                                'pin'          => ($tempPin = (string)rand(1000, 9999)), 
+                                'status'       => 'Active',
+                                'last_login'   => 'Never Logged In',
+                            ]);
+                            \Illuminate\Support\Facades\Log::info("Auto-created parent account upon approval: {$login_id}");
+
+                            // ── SEND WELCOME EMAIL ──
+                            if (!empty($item->parent_email)) {
+                                $pin = $tempPin ?? (string)rand(1000, 9999);
+                                try {
+                                    $html = "
+                                    <div style='font-family: sans-serif; color: #333; max-width: 600px; margin: auto; border: 1px solid #eee; padding: 20px; border-radius: 10px;'>
+                                        <div style='text-align: center; margin-bottom: 20px;'>
+                                            <img src='https://littleseeds.org.in/logo.png' alt='School Logo' style='height: 60px;' />
+                                        </div>
+                                        <h2 style='color: #0ea5e9; text-align: center;'>Welcome to Little Seeds School!</h2>
+                                        <p>Dear Parent,</p>
+                                        <p>Congratulations! Your child <strong>{$item->student_name}</strong>'s admission has been approved successfully.</p>
+                                        <p>You can now access the <strong>Parent Mobile App</strong> to track your child's progress, attendance, and fees.</p>
+                                        <div style='background: #f0f9ff; padding: 15px; border-radius: 8px; margin: 20px 0;'>
+                                            <p style='margin: 0;'><strong>Your Login Credentials:</strong></p>
+                                            <p style='margin: 5px 0;'>User ID: <span style='color: #0369a1; font-weight: bold;'>$login_id</span></p>
+                                            <p style='margin: 5px 0;'>Initial PIN: <span style='color: #0369a1; font-weight: bold;'>$pin</span></p>
+                                        </div>
+                                        <p>For security reasons, please change your PIN after first login.</p>
+                                        <p style='font-size: 12px; color: #666; margin-top: 30px; border-t: 1px solid #eee; padding-top: 10px;'>
+                                            Best Regards,<br/><strong>Little Seeds School Administration</strong><br/>
+                                            Contact: info@littleseeds.org.in
+                                        </p>
+                                    </div>";
+
+                                    Mail::send([], [], function($message) use ($item, $html) {
+                                        $message->to($item->parent_email)
+                                                ->subject('Welcome to Little Seeds School - Parent App Credentials')
+                                                ->from(config('mail.from.address'), config('mail.from.name'))
+                                                ->html($html);
+                                    });
+                                    \Illuminate\Support\Facades\Log::info("Welcome email sent upon approval to: {$item->parent_email}");
+                                } catch (\Exception $eEmail) {
+                                    \Illuminate\Support\Facades\Log::error("Failed to send welcome email upon approval: " . $eEmail->getMessage());
+                                }
+                            }
+                        }
+                    }
+                } catch (\Exception $exParent) {
+                    \Illuminate\Support\Facades\Log::error('Auto-parent creation failed upon approval: ' . $exParent->getMessage());
+                }
+            }
+
             return response()->json($item);
         }
         catch (Exception $e) {

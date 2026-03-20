@@ -17,6 +17,7 @@ const TransportManagement = () => {
   const [vehicles, setVehicles] = useState([]);
   const [drivers, setDrivers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [selectedMapRoute, setSelectedMapRoute] = useState(null);
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -31,10 +32,12 @@ const TransportManagement = () => {
         const list = (rv.value.data?.data ?? rv.value.data ?? []).map(r => ({
           rawId: r.id,
           id: r.route_id ?? `RT-${r.id}`,
-          name: r.route_name ?? 'N/A',
-          stops: r.stops ? `${r.stops} Stops` : '0 Stops',
-          vehicleId: r.vehicle_id ?? 'N/A',
-          students: r.student_count ?? 0,
+          name: r.route_name ?? r.name ?? 'N/A',
+          stops: r.total_stops ? `${r.total_stops} Stops` : '0 Stops',
+          vehicleId: r.assigned_vehicle_id || r.vehicle_number || 'N/A',
+          assignedVehicleId: r.assigned_vehicle_id,
+          assignedDriverId: r.assigned_driver_id,
+          students: r.total_students ?? 0,
           status: r.status ?? 'ACTIVE',
           tracking: 'Live',
         }));
@@ -47,10 +50,13 @@ const TransportManagement = () => {
           id: v.vehicle_id ?? `VEH-${v.id}`,
           regNo: v.registration_no ?? v.reg_no ?? 'N/A',
           type: v.vehicle_type ?? 'BUS',
-          seats: v.seating_capacity ?? v.seats ?? 0,
-          nextService: v.next_service_date ?? 'Pending',
+          seats: v.seating_capacity ?? v.seats ?? v.capacity ?? 0,
+          nextService: v.next_service_date ?? v.next_service ?? 'Pending',
           fuel: v.fuel_level ?? 100,
           status: v.status ?? 'ACTIVE',
+          lat: v.current_lat,
+          lng: v.current_lng,
+          isTracking: v.is_tracking,
         }));
         setVehicles(list);
       }
@@ -83,6 +89,18 @@ const TransportManagement = () => {
     } catch (err) { alert('Delete failed: ' + err.message); }
   };
 
+  const simulateLocation = async () => {
+    if (vehicles.length === 0) return alert('No vehicles to simulate');
+    const v = vehicles[Math.floor(Math.random() * vehicles.length)];
+    const lat = 25.5941 + (Math.random() - 0.5) * 0.01; // Mock Patna Area
+    const lng = 85.1376 + (Math.random() - 0.5) * 0.01;
+    try {
+       await api.post(`/vehicle-location-update/${v.rawId}`, { lat, lng });
+       fetchAll();
+       alert(`Simulated move for ${v.regNo}`);
+    } catch (err) { alert('Simulation failed'); }
+  };
+
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
   /* ── Filtered Data ── */
@@ -102,6 +120,9 @@ const TransportManagement = () => {
           <p className="text-[10px] font-bold text-[var(--text-secondary)] tracking-[0.1em] uppercase opacity-70">Real-time Vehicles & Route Management System</p>
         </div>
         <div className="flex items-center space-x-2">
+          <button onClick={simulateLocation} className="flex items-center space-x-2 h-9 px-4 rounded-lg bg-emerald-500 text-white text-[11px] font-extrabold hover:bg-emerald-600 transition-colors shadow-lg shadow-emerald-500/20">
+            <Activity size={13} strokeWidth={2.5} /><span>Simulate GPS Move</span>
+          </button>
           <button onClick={fetchAll} disabled={loading} className="flex items-center space-x-2 h-9 px-4 rounded-lg bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 text-[11px] font-extrabold text-[var(--text-primary)] dark:text-white hover:bg-gray-50 dark:hover:bg-white/10 transition-colors shadow-sm disabled:opacity-50">
             <RefreshCw size={13} strokeWidth={2.5} className={`text-[#6366f1] ${loading ? 'animate-spin' : ''}`} /><span>Refresh</span>
           </button>
@@ -222,10 +243,26 @@ const TransportManagement = () => {
                        </div>
                        <div className="p-2 bg-white dark:bg-black/20 border border-[var(--border-color)] dark:border-white/5 rounded-lg flex items-center justify-between">
                           <div className="flex items-center space-x-2">
-                             <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></div>
-                             <span className="text-[9px] font-black text-[var(--text-primary)] uppercase">Tracking: <span className="text-slate-400 font-bold ml-1">-</span></span>
+                             {(() => {
+                                 const v = vehicles.find(vh => String(vh.rawId) === String(route.assignedVehicleId));
+                                 return (
+                                    <>
+                                       <div className={`w-1.5 h-1.5 rounded-full ${v?.lat ? 'bg-blue-500 animate-pulse' : 'bg-slate-300'}`}></div>
+                                       <span className="text-[9px] font-black text-[var(--text-primary)] uppercase ml-2">
+                                          Tracking: <span className="text-indigo-500 font-black ml-1">
+                                             {v?.lat ? `${Number(v.lat).toFixed(4)}, ${Number(v.lng).toFixed(4)}` : 'OFFLINE'}
+                                          </span>
+                                       </span>
+                                    </>
+                                 );
+                              })()}
                           </div>
-                          <button className="text-[8px] font-black text-blue-500 uppercase tracking-widest hover:underline">View Map</button>
+                          <button 
+                             onClick={() => { const v = vehicles.find(vh => String(vh.rawId) === String(route.assignedVehicleId)); setSelectedMapRoute({ ...route, vehicle: v }); }}
+                             className="text-[8px] font-black text-blue-500 uppercase tracking-widest hover:underline cursor-pointer"
+                           >
+                              View Map
+                           </button>
                        </div>
                     </div>
                   ))}
@@ -407,6 +444,83 @@ const TransportManagement = () => {
       {activeModal === 'driver' && (
         <AddDriverModal onClose={closeModal} onSuccess={fetchAll} vehicles={vehicles} />
       )}
+
+      {/* Live Map Modal */}
+      {selectedMapRoute && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-md">
+           <div className="bg-[#0f172a] border border-white/10 rounded-2xl w-full max-w-4xl shadow-2xl overflow-hidden flex flex-col h-[80vh]">
+              <div className="p-4 border-b border-white/10 flex items-center justify-between bg-white/[0.02]">
+                 <div>
+                    <h3 className="text-sm font-black text-white uppercase tracking-widest flex items-center">
+                       <MapPin size={16} className="mr-2 text-blue-500" />
+                       Live Tracking: {selectedMapRoute.name}
+                    </h3>
+                    <p className="text-[9px] font-extrabold text-slate-500 uppercase mt-0.5 tracking-tight">
+                       Bus: {selectedMapRoute.vehicle?.regNo || 'N/A'} — Driver: {drivers.find(d => String(d.rawId) === String(selectedMapRoute.assignedDriverId))?.name || 'Unknown'}
+                    </p>
+                 </div>
+                 <button onClick={() => setSelectedMapRoute(null)} className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/10 transition-all">
+                    <X size={18} />
+                 </button>
+              </div>
+              <div className="flex-1 bg-slate-800 relative">
+                 {selectedMapRoute.vehicle?.lat ? (
+                    <iframe
+                       width="100%"
+                       height="100%"
+                       frameBorder="0"
+                       scrolling="no"
+                       marginHeight="0"
+                       marginWidth="0"
+                       src={"https://maps.google.com/maps?q=" + selectedMapRoute.vehicle.lat + "," + selectedMapRoute.vehicle.lng + "&hl=en&z=14&output=embed"}
+                       className="border-none"
+                    ></iframe>
+                 ) : (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-500 space-y-4">
+                       <div className="w-16 h-16 rounded-full border-4 border-slate-700 border-t-blue-500 animate-spin"></div>
+                       <p className="text-[11px] font-black uppercase tracking-widest">Awaiting GPS Signal...</p>
+                    </div>
+                 )}
+                 <div className="absolute bottom-6 left-6 p-4 bg-[#0f172a]/90 backdrop-blur border border-white/10 rounded-xl shadow-xl w-64 z-10 transition-all">
+                    <div className="flex items-center space-x-3 mb-4">
+                       <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-500">
+                          <Bus size={20} />
+                       </div>
+                       <div>
+                          <p className="text-[10px] font-extrabold text-blue-500 uppercase leading-none mb-1">On Route</p>
+                          <p className="text-xs font-black text-white uppercase">{selectedMapRoute.vehicle?.regNo}</p>
+                       </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                       <div>
+                          <p className="text-[8px] font-black text-slate-500 uppercase mb-1">Coordinates</p>
+                          <p className="text-[9px] font-bold text-slate-300">{Number(selectedMapRoute.vehicle?.lat || 0).toFixed(4)}, {Number(selectedMapRoute.vehicle?.lng || 0).toFixed(4)}</p>
+                       </div>
+                       <div>
+                          <p className="text-[8px] font-black text-slate-500 uppercase mb-1">Status</p>
+                          <div className="flex items-center space-x-1.5">
+                             <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
+                             <p className="text-[9px] font-bold text-emerald-500">ACTIVE</p>
+                          </div>
+                       </div>
+                    </div>
+                 </div>
+              </div>
+              <div className="p-4 bg-[#0f172a] border-t border-white/10 flex items-center justify-between">
+                 <div className="flex items-center space-x-6 text-[9px] font-black uppercase tracking-widest text-slate-500">
+                    <span className="flex items-center"><Users size={12} className="mr-2" /> {selectedMapRoute.students} Students</span>
+                    <span className="flex items-center"><Navigation size={12} className="mr-2" /> {selectedMapRoute.stops}</span>
+                 </div>
+                 <button 
+                   onClick={() => window.open("https://www.google.com/maps/dir/?api=1&destination=" + selectedMapRoute.vehicle?.lat + "," + selectedMapRoute.vehicle?.lng, '_blank')}
+                   className="px-4 py-2 bg-blue-500 text-white rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 transition-all flex items-center shadow-lg shadow-blue-500/20"
+                 >
+                    <Navigation size={12} className="mr-2" /> View Full Path
+                 </button>
+              </div>
+           </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -418,6 +532,8 @@ const AddRouteModal = ({ onClose, onSuccess, vehicles, drivers }) => {
     name: '',
     total_stops: '',
     vehicle_number: '',
+    assigned_vehicle_id: '',
+    assigned_driver_id: '',
     driver_name: '',
     driver_contact: '',
     start_time: '',
@@ -432,11 +548,23 @@ const AddRouteModal = ({ onClose, onSuccess, vehicles, drivers }) => {
     } catch (err) { alert('Save failed: ' + err.message); }
   };
 
+  const handleVehicleChange = (vId) => {
+    const v = vehicles.find(vh => String(vh.rawId) === String(vId));
+    if (v) {
+      setFormData({
+        ...formData,
+        assigned_vehicle_id: v.rawId,
+        vehicle_number: v.regNo
+      });
+    }
+  };
+
   const handleDriverChange = (driverId) => {
-    const d = drivers.find(drv => drv.id === driverId || drv.rawId === parseInt(driverId));
+    const d = drivers.find(drv => String(drv.rawId) === String(driverId));
     if (d) {
       setFormData({
         ...formData,
+        assigned_driver_id: d.rawId,
         driver_name: d.name,
         driver_contact: d.phone
       });
@@ -451,17 +579,18 @@ const AddRouteModal = ({ onClose, onSuccess, vehicles, drivers }) => {
         <div className="flex flex-col">
           <label className="text-[9px] font-black text-[var(--text-secondary)] uppercase tracking-widest mb-1.5 ml-1">ASSIGN VEHICLE</label>
           <select 
-            value={formData.vehicle_number}
-            onChange={e => setFormData({...formData, vehicle_number: e.target.value})}
+            value={formData.assigned_vehicle_id}
+            onChange={e => handleVehicleChange(e.target.value)}
             className="h-10 px-3 bg-white dark:bg-[#1e293b] border border-[var(--border-color)] dark:border-white/10 rounded-lg text-[11px] font-bold text-[var(--text-primary)] outline-none focus:border-amber-500"
           >
             <option value="">Select Vehicle</option>
-            {vehicles.map(v => <option key={v.id} value={v.regNo}>{v.regNo} ({v.id})</option>)}
+            {vehicles.map(v => <option key={v.id} value={v.rawId}>{v.regNo} ({v.id})</option>)}
           </select>
         </div>
         <div className="flex flex-col">
           <label className="text-[9px] font-black text-[var(--text-secondary)] uppercase tracking-widest mb-1.5 ml-1">ASSIGN DRIVER</label>
           <select 
+            value={formData.assigned_driver_id}
             onChange={e => handleDriverChange(e.target.value)}
             className="h-10 px-3 bg-white dark:bg-[#1e293b] border border-[var(--border-color)] dark:border-white/10 rounded-lg text-[11px] font-bold text-[var(--text-primary)] outline-none focus:border-amber-500"
           >

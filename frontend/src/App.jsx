@@ -10,6 +10,7 @@ import Homework from './pages/Homework';
 import ExamsResults from './pages/ExamsResults';
 import Timetable from './pages/Timetable';
 import Attendance from './pages/Attendance';
+import StudentLeaves from './pages/StudentLeaves';
 import StaffManagement from './pages/StaffManagement';
 import FinanceFees from './pages/FinanceFees';
 import SalaryManagement from './pages/SalaryManagement';
@@ -37,10 +38,14 @@ const ProtectedRoute = ({ children }) => {
   return <MainLayout>{children}</MainLayout>;
 };
 
+import { Toaster } from 'react-hot-toast';
+
 function App() {
   const token = localStorage.getItem('token');
 
   return (
+    <>
+    <Toaster position="top-right" reverseOrder={false} />
     <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <Routes>
         {/* Public Website Routes */}
@@ -75,6 +80,7 @@ function App() {
           <Route path="exams" element={<ProtectedRoute><ExamsResults /></ProtectedRoute>} />
           <Route path="timetable" element={<ProtectedRoute><Timetable /></ProtectedRoute>} />
           <Route path="attendance" element={<ProtectedRoute><Attendance /></ProtectedRoute>} />
+          <Route path="leaves" element={<ProtectedRoute><StudentLeaves /></ProtectedRoute>} />
           <Route path="staff" element={<ProtectedRoute><StaffManagement /></ProtectedRoute>} />
           <Route path="finance" element={<ProtectedRoute><FinanceFees /></ProtectedRoute>} />
           <Route path="salary" element={<ProtectedRoute><SalaryManagement /></ProtectedRoute>} />
@@ -89,6 +95,7 @@ function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>
+    </>
   );
 }
 

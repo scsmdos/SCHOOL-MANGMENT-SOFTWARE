@@ -1,26 +1,54 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Download, UserPlus, UserSquare2, CheckCircle2, Clock, XOctagon, Search, Eye, Edit, Trash2, RefreshCw, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Download, UserPlus, UserSquare2, CheckCircle2, Clock, XOctagon, Search, Eye, Edit, Trash2, RefreshCw, Loader2, ChevronLeft, ChevronRight, CreditCard } from 'lucide-react';
+import toast from 'react-hot-toast';
 import AdmissionFormModal from '../components/AdmissionFormModal';
 import ViewAdmissionModal from '../components/ViewAdmissionModal';
+import IDCardModal from '../components/IDCardModal';
 import api from '../api/axios';
 
 const PAGE_SIZE = 15;
 const Admissions = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
+  const [isIDCardModalOpen, setIsIDCardModalOpen] = useState(false);
   const [viewData, setViewData] = useState(null);
   const [editData, setEditData] = useState(null);
+  const [idCardData, setIdCardData] = useState(null);
   const [admissionsList, setAdmissionsList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalEntries, setTotalEntries] = useState(0);
+  const [stats, setStats] = useState({ approved: 0, pending: 0, rejected: 0, total: 0 });
+
+  // Debounce search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+      setPage(1);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   const fetchAdmissions = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await api.get('/admissions');
-      const list = (res.data?.data ?? res.data ?? []).map(a => ({
+      const params = {
+        page: page,
+        per_page: PAGE_SIZE,
+        search: debouncedSearch,
+      };
+      if (statusFilter !== 'ALL') {
+        params.status = statusFilter.charAt(0).toUpperCase() + statusFilter.slice(1).toLowerCase();
+      }
+
+      const res = await api.get('/admissions', { params });
+      
+      const payload = res.data?.data ?? [];
+      const list = payload.map(a => ({
         ...a,
         id: a.admission_no ?? `ADM-${a.id}`,
         rawId: a.id,
@@ -30,64 +58,110 @@ const Admissions = () => {
         contactNo: a.contact_no ?? 'N/A',
         date: a.created_at ? a.created_at.split('T')[0] : 'N/A',
         status: a.status ?? 'Pending',
-        photo: a.student_photo ?? null,
+        student_photo: a.student_photo ?? null,
+        parent_photo: a.parent_photo ?? null,
+        parent_email: a.parent_email ?? null,
       }));
       setAdmissionsList(list);
+      setTotalPages(res.data?.last_page ?? 1);
+      setTotalEntries(res.data?.total || list.length);
+
+      // Stats should ideally come from a separate count query or dashboard-stats
+      // For now, we fetch a small summary for the cards if it's the first load or stats are 0
+      // Fetch detailed stats for cards
+      const statsRes = await api.get('/dashboard-stats');
+      if (statsRes.data?.stats) {
+        setStats({
+          approved: statsRes.data.stats.approvedAdmissions || 0,
+          pending: statsRes.data.stats.pendingAdmissions || 0,
+          rejected: statsRes.data.stats.rejectedAdmissions || 0,
+          total: statsRes.data.stats.totalAdmissions || 0,
+        });
+      }
     } catch (err) {
       console.error('Admissions fetch error:', err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [page, debouncedSearch, statusFilter]);
 
   useEffect(() => { fetchAdmissions(); }, [fetchAdmissions]);
 
   const handleView = (row) => { setViewData(row); setIsViewModalOpen(true); };
   const handleEdit = (row) => { setEditData(row); setIsModalOpen(true); };
+  const handleIDCard = (row) => { setIdCardData(row); setIsIDCardModalOpen(true); };
 
   const handleDelete = async (rawId, displayId) => {
-    if (!window.confirm(`Delete admission ${displayId}?`)) return;
+    if (!window.confirm(`Are you sure you want to permanently delete admission ${displayId}? This action cannot be undone.`)) return;
     try {
       await api.delete(`/admissions/${rawId}`);
-      setAdmissionsList(prev => prev.filter(a => a.rawId !== rawId));
+      await fetchAdmissions(); // Refresh list and counts
+      toast.success('Admission record deleted permanently');
     } catch (err) {
-      alert('Failed to delete: ' + (err.response?.data?.message || err.message));
+      toast.error('Failed to delete: ' + (err.response?.data?.message || err.message));
     }
   };
 
   const handleStatusChange = async (rawId, newStatus) => {
     try {
       if (newStatus === 'Rejected') {
-        if (!window.confirm('Are you sure you want to completely reject and delete this admission entry?')) return;
+        if (!window.confirm('Are you sure you want to completely reject and PERMANENTLY DELETE this admission entry?')) return;
         await api.delete(`/admissions/${rawId}`);
-        setAdmissionsList(prev => prev.filter(a => a.rawId !== rawId));
-        setViewData(null);
-        setIsViewModalOpen(false);
-        alert('Admission rejected and permanently deleted.');
-        return;
+        await fetchAdmissions();
+        toast.success('Admission rejected and permanently deleted.');
+      } else {
+        await api.put(`/admissions/${rawId}`, { status: newStatus });
+        await fetchAdmissions();
+        if (newStatus === 'Approved') toast.success('Admission approved successfully!');
+        else toast.success(`Status updated to ${newStatus}`);
       }
-      await api.put(`/admissions/${rawId}`, { status: newStatus });
-      setAdmissionsList(prev => prev.map(a => a.rawId === rawId ? { ...a, status: newStatus } : a));
-      // Update the modal's viewData so the status reflects immediately and buttons hide
-      setViewData(prev => prev ? { ...prev, status: newStatus } : prev);
+
+      // Automatically close modal after any action
+      setViewData(null);
+      setIsViewModalOpen(false);
+
     } catch (err) {
-      alert('Failed to update status: ' + (err.response?.data?.message || err.message));
+      toast.error('Failed to update status: ' + (err.response?.data?.message || err.message));
     }
   };
 
-  const filtered = admissionsList.filter(a => {
-    const q = search.toLowerCase();
-    const matchSearch = !q || a.studentName.toLowerCase().includes(q) || a.id.toLowerCase().includes(q) || a.contactNo.includes(q);
-    const matchStatus = statusFilter === 'ALL' || a.status?.toLowerCase() === statusFilter.toLowerCase();
-    return matchSearch && matchStatus;
-  });
+  const handleExportCSV = () => {
+    if (admissionsList.length === 0) {
+      toast.error('No data to export');
+      return;
+    }
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+    const headers = ['Admin No', 'Student Name', 'Father Name', 'Class', 'Contact No', 'Admission Date', 'Status'];
+    const csvContent = [
+      headers.join(','),
+      ...admissionsList.map(row => [
+        `"${row.id}"`,
+        `"${row.studentName}"`,
+        `"${row.fatherName}"`,
+        `"${row.className}"`,
+        `"${row.contactNo}"`,
+        `"${row.date}"`,
+        `"${row.status}"`
+      ].join(','))
+    ].join('\n');
 
-  const totalApproved = admissionsList.filter(a => a.status === 'Approved').length;
-  const totalPending = admissionsList.filter(a => a.status === 'Pending').length;
-  const totalRejected = admissionsList.filter(a => a.status === 'Rejected').length;
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `admissions_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success('CSV Exported successfully!');
+  };
+
+  const filtered = admissionsList; // Server handled it
+  const paginated = admissionsList; 
+
+  const totalApproved = stats.approved;
+  const totalPending = stats.pending;
+  const totalAdmissions = stats.total;
 
   return (
     <div className="p-6 bg-[var(--bg-main)] h-[calc(100vh-56px)] overflow-hidden flex flex-col transition-colors duration-300">
@@ -97,7 +171,7 @@ const Admissions = () => {
         <div>
           <h2 className="text-[22px] font-bold text-[var(--text-primary)] tracking-tight leading-none mb-1">Admissions Desk</h2>
           <p className="text-[10px] font-bold text-[var(--text-secondary)] tracking-widest uppercase">
-            {loading ? 'Loading...' : `${filtered.length} admissions found`}
+            {loading ? 'Loading...' : `${totalEntries} admissions found`}
           </p>
         </div>
         
@@ -116,7 +190,10 @@ const Admissions = () => {
             />
           </div>
 
-          <button className="flex items-center space-x-2 bg-[var(--bg-panel-alt)] border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] px-4 py-2 rounded-md transition-colors text-xs font-bold shadow-sm h-9">
+          <button 
+            onClick={handleExportCSV}
+            className="flex items-center space-x-2 bg-[var(--bg-panel-alt)] border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] px-4 py-2 rounded-md transition-colors text-xs font-bold shadow-sm h-9"
+          >
             <Download size={14} strokeWidth={2.5} />
             <span>Export CSV</span>
           </button>
@@ -132,7 +209,7 @@ const Admissions = () => {
       </div>
 
       {/* Stats Cards Grid - Exact Colors & Layout */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4 shrink-0">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4 shrink-0">
         
         {/* Total Admissions */}
         <div className="bg-[var(--bg-panel-alt)] border border-[var(--border-color)] border-l-2 border-l-[#0ea5e9] rounded-md p-5 flex flex-col justify-between shadow-sm h-[90px]">
@@ -142,7 +219,7 @@ const Admissions = () => {
                <UserSquare2 size={12} strokeWidth={2.5} />
             </div>
           </div>
-          <h3 className="text-2xl font-bold text-[var(--text-primary)] leading-none tracking-tight">{admissionsList.length}</h3>
+          <h3 className="text-2xl font-bold text-[var(--text-primary)] leading-none tracking-tight">{totalAdmissions}</h3>
         </div>
 
         {/* Approved */}
@@ -165,17 +242,6 @@ const Admissions = () => {
             </div>
           </div>
           <h3 className="text-2xl font-bold text-[var(--text-primary)] leading-none tracking-tight">{totalPending}</h3>
-        </div>
-
-        {/* Rejected */}
-        <div className="bg-[var(--bg-panel-alt)] border border-[var(--border-color)] border-l-2 border-l-[#e11d48] rounded-md p-5 flex flex-col justify-between shadow-sm h-[90px]">
-          <div className="flex justify-between items-start mb-2">
-            <p className="text-[10px] font-bold text-[var(--text-secondary)] tracking-widest uppercase">Rejected</p>
-            <div className="w-5 h-5 rounded-full bg-[#881337]/40 flex items-center justify-center text-[#fb7185]">
-               <XOctagon size={12} strokeWidth={2.5} />
-            </div>
-          </div>
-          <h3 className="text-2xl font-bold text-[var(--text-primary)] leading-none tracking-tight">{totalRejected}</h3>
         </div>
       </div>
 
@@ -222,12 +288,31 @@ const Admissions = () => {
                       : 'bg-red-100 border border-red-300 text-red-700 dark:bg-red-900/30 dark:border-red-700 dark:text-red-400'
                     }`}>{row.status?.toUpperCase()}</span>
                   </td>
-                  <td className="px-5 py-2 whitespace-nowrap">
-                     <div className="flex items-center justify-end space-x-1.5">
-                        <button onClick={() => handleView(row)} className="w-6 h-6 rounded flex items-center justify-center bg-white dark:bg-[#10162A] border border-[#0ea5e9] text-[#0ea5e9] hover:bg-[#0ea5e9]/10 transition-colors shadow-sm"><Eye size={10} strokeWidth={2.5}/></button>
-                        <button onClick={() => handleEdit(row)} className="w-6 h-6 rounded flex items-center justify-center bg-white dark:bg-[#10162A] border border-[#eab308] text-[#eab308] hover:bg-[#eab308]/10 transition-colors shadow-sm"><Edit size={10} strokeWidth={2.5}/></button>
-                        <button onClick={() => handleDelete(row.rawId, row.id)} className="w-6 h-6 rounded flex items-center justify-center bg-white dark:bg-[#10162A] border border-[#f43f5e] text-[#f43f5e] hover:bg-[#f43f5e]/10 transition-colors shadow-sm"><Trash2 size={10} strokeWidth={2.5}/></button>
-                     </div>
+                    <td className="px-5 py-2 whitespace-nowrap">
+                      <div className="flex items-center justify-end space-x-1.5">
+                        {row.status === 'Pending' && (
+                          <>
+                            <button 
+                              onClick={() => handleStatusChange(row.rawId, 'Approved')} 
+                              title="Approve" 
+                              className="w-6 h-6 rounded flex items-center justify-center bg-white dark:bg-[#10162A] border border-[#22c55e] text-[#22c55e] hover:bg-[#22c55e]/10 transition-colors shadow-sm"
+                            >
+                              <CheckCircle2 size={10} strokeWidth={2.5}/>
+                            </button>
+                            <button 
+                              onClick={() => handleStatusChange(row.rawId, 'Rejected')} 
+                              title="Reject" 
+                              className="w-6 h-6 rounded flex items-center justify-center bg-white dark:bg-[#10162A] border border-[#f43f5e] text-[#f43f5e] hover:bg-[#f43f5e]/10 transition-colors shadow-sm"
+                            >
+                              <XOctagon size={10} strokeWidth={2.5}/>
+                            </button>
+                          </>
+                        )}
+                        <button onClick={() => handleIDCard(row)} title="Generate ID Card" className="w-6 h-6 rounded flex items-center justify-center bg-white dark:bg-[#10162A] border border-[#d946ef] text-[#d946ef] hover:bg-[#d946ef]/10 transition-colors shadow-sm"><CreditCard size={10} strokeWidth={2.5}/></button>
+                        <button onClick={() => handleView(row)} title="View" className="w-6 h-6 rounded flex items-center justify-center bg-white dark:bg-[#10162A] border border-[#0ea5e9] text-[#0ea5e9] hover:bg-[#0ea5e9]/10 transition-colors shadow-sm"><Eye size={10} strokeWidth={2.5}/></button>
+                        <button onClick={() => handleEdit(row)} title="Edit" className="w-6 h-6 rounded flex items-center justify-center bg-white dark:bg-[#10162A] border border-[#eab308] text-[#eab308] hover:bg-[#eab308]/10 transition-colors shadow-sm"><Edit size={10} strokeWidth={2.5}/></button>
+                        <button onClick={() => handleDelete(row.rawId, row.id)} title="Delete" className="w-6 h-6 rounded flex items-center justify-center bg-white dark:bg-[#10162A] border border-[#f43f5e] text-[#f43f5e] hover:bg-[#f43f5e]/10 transition-colors shadow-sm"><Trash2 size={10} strokeWidth={2.5}/></button>
+                      </div>
                   </td>
                 </tr>
               ))}
@@ -261,6 +346,12 @@ const Admissions = () => {
         onClose={() => setIsViewModalOpen(false)}
         data={viewData}
         onStatusChange={handleStatusChange}
+      />
+
+      <IDCardModal 
+        isOpen={isIDCardModalOpen}
+        onClose={() => setIsIDCardModalOpen(false)}
+        data={idCardData}
       />
 
     </div>

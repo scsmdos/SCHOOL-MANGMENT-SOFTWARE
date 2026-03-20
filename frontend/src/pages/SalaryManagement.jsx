@@ -30,6 +30,7 @@ const SalaryManagement = () => {
         department: e.department ?? 'Staff',
         salary: e.basic_salary ? Number(e.basic_salary).toLocaleString() : '0',
         rawSalary: e.basic_salary ?? 0,
+        advance: e.other_deduction || 0,
         status: e.status ?? 'PAID',
       }));
       setSalaries(list);
@@ -74,6 +75,7 @@ const SalaryManagement = () => {
         designation: data.designation,
         department: data.department,
         basic_salary: data.salary,
+        other_deduction: data.advance || 0,
         status: data.status,
         employee_id: data.employee_id || `EMP-${Date.now()}`
       };
@@ -157,7 +159,9 @@ const SalaryManagement = () => {
                 <th className="px-5 py-3 text-[9px] font-extrabold text-[#94a3b8] tracking-widest uppercase whitespace-nowrap text-left">EMPLOYEE DETAILS</th>
                 <th className="px-5 py-3 text-[9px] font-extrabold text-[#94a3b8] tracking-widest uppercase whitespace-nowrap text-left">DESIGNATION</th>
                 <th className="px-5 py-3 text-[9px] font-extrabold text-[#94a3b8] tracking-widest uppercase whitespace-nowrap text-center">DEPARTMENT</th>
-                <th className="px-5 py-3 text-[9px] font-extrabold text-[#94a3b8] tracking-widest uppercase whitespace-nowrap text-center">SALARY</th>
+                <th className="px-5 py-3 text-[9px] font-extrabold text-[#94a3b8] tracking-widest uppercase whitespace-nowrap text-center">BASIC SALARY</th>
+                <th className="px-5 py-3 text-[9px] font-extrabold text-[#94a3b8] tracking-widest uppercase whitespace-nowrap text-center">ADVANCE</th>
+                <th className="px-5 py-3 text-[9px] font-extrabold text-[#94a3b8] tracking-widest uppercase whitespace-nowrap text-center">NET PAYABLE</th>
                 <th className="px-5 py-3 text-[9px] font-extrabold text-[#94a3b8] tracking-widest uppercase whitespace-nowrap text-center">STATUS</th>
                 <th className="px-5 py-3 text-[9px] font-extrabold text-[#94a3b8] tracking-widest uppercase whitespace-nowrap text-right">ACTIONS</th>
               </tr>
@@ -180,11 +184,18 @@ const SalaryManagement = () => {
                     <span className="text-[13px] font-black text-[var(--text-primary)]">₹{item.salary}</span>
                   </td>
                   <td className="px-5 py-1.5 text-center">
+                    <span className="text-[11px] font-bold text-rose-500">₹{item.advance}</span>
+                  </td>
+                  <td className="px-5 py-1.5 text-center">
+                    <div className="flex flex-col items-center">
+                      <span className="text-[14px] font-black text-[#6366f1]">₹{(parseFloat(item.rawSalary) + parseFloat(item.advance)).toLocaleString()}</span>
+                    </div>
+                  </td>
+                  <td className="px-5 py-1.5 text-center">
                     <span className={`px-2.5 py-0.5 text-[9px] font-black rounded border tracking-widest uppercase ${item.status === 'PAID' ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-[#4ade80] border-green-200 dark:border-green-800' : 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 border-orange-200 dark:border-orange-800'}`}>{item.status}</span>
                   </td>
                   <td className="px-5 py-1.5 text-right">
                     <div className="flex items-center justify-end space-x-1">
-                      <button onClick={() => alert(`Sending slip to ${item.name}`)} className="w-7 h-7 rounded flex items-center justify-center bg-white dark:bg-[#10162A] border border-gray-200 dark:border-[#334155] text-indigo-500 hover:bg-indigo-500 hover:text-white transition-all shadow-sm"><Send size={12} strokeWidth={2.5} /></button>
                       <button onClick={() => { setViewData(item); setIsViewOpen(true); }} className="w-7 h-7 rounded flex items-center justify-center bg-white dark:bg-[#10162A] border border-gray-200 dark:border-[#334155] text-blue-500 hover:bg-blue-500 hover:text-white transition-all shadow-sm"><Eye size={12} strokeWidth={2.5} /></button>
                       <button onClick={() => { setCurrentEdit(item); setIsModalOpen(true); }} className="w-7 h-7 rounded flex items-center justify-center bg-white dark:bg-[#10162A] border border-gray-200 dark:border-[#334155] text-[#10b981] hover:bg-[#10b981] hover:text-white transition-all shadow-sm"><Edit size={12} strokeWidth={2.5} /></button>
                       <button onClick={() => handleDelete(item.id)} className="w-7 h-7 rounded flex items-center justify-center bg-white dark:bg-[#10162A] border border-gray-200 dark:border-[#334155] text-[#f43f5e] hover:bg-[#f43f5e] hover:text-white transition-all shadow-sm"><Trash2 size={12} strokeWidth={2.5} /></button>
@@ -223,8 +234,10 @@ const SalaryManagement = () => {
             <p className="text-[10px] font-black text-[#6366f1] uppercase tracking-widest mb-6">{viewData.designation}</p>
             <div className="space-y-2 mb-8 text-left">
                <div className="flex justify-between py-2 border-b border-gray-100 dark:border-white/5"><span className="text-[10px] font-bold text-gray-400 uppercase">Department</span><span className="text-[11px] font-black text-[var(--text-primary)]">{viewData.department}</span></div>
-               <div className="flex justify-between py-2 border-b border-gray-100 dark:border-white/5"><span className="text-[10px] font-bold text-gray-400 uppercase">Monthly Salary</span><span className="text-[12px] font-black text-emerald-500">₹{viewData.salary}</span></div>
-               <div className="flex justify-between py-2 border-b border-gray-100 dark:border-white/5"><span className="text-[10px] font-bold text-gray-400 uppercase">Current Status</span><span className="text-[10px] font-black text-blue-500">{viewData.status}</span></div>
+               <div className="flex justify-between py-2 border-b border-gray-100 dark:border-white/5"><span className="text-[10px] font-bold text-gray-400 uppercase">Basic Salary</span><span className="text-[12px] font-black text-[var(--text-primary)]">₹{viewData.salary}</span></div>
+               <div className="flex justify-between py-2 border-b border-gray-100 dark:border-white/5"><span className="text-[10px] font-bold text-gray-400 uppercase">Advance Taken</span><span className="text-[12px] font-black text-emerald-500">+ ₹{viewData.advance}</span></div>
+               <div className="flex justify-between py-3 border-b border-gray-100 dark:border-white/5 bg-gray-50 dark:bg-white/5 px-2 -mx-2 rounded"><span className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase">Total Payable</span><span className="text-[13px] font-black text-indigo-600 dark:text-indigo-400">₹{(parseFloat(viewData.rawSalary) + parseFloat(viewData.advance)).toLocaleString()}</span></div>
+               <div className="flex justify-between py-2"><span className="text-[10px] font-bold text-gray-400 uppercase">Current Status</span><span className="text-[10px] font-black text-blue-500">{viewData.status}</span></div>
             </div>
             <button onClick={() => setIsViewOpen(false)} className="w-full py-2 bg-gray-100 dark:bg-[#10162A] text-[10px] font-black uppercase tracking-widest rounded-lg">Close Details</button>
           </div>
@@ -239,12 +252,50 @@ const SalaryManagement = () => {
 const inputClass = "w-full h-10 px-3 bg-white dark:bg-[#10162A] border border-gray-200 dark:border-[#334155] rounded-md text-[11px] font-bold text-[var(--text-primary)] focus:outline-none focus:border-[#6366f1] transition-colors shadow-sm";
 
 const SalaryModal = ({ isOpen, onClose, onSave, editData }) => {
-  const [formData, setFormData] = useState({ name: '', designation: '', department: 'Teaching', salary: '', status: 'PAID' });
+  const defaultState = { name: '', designation: '', department: 'Teaching', salary: '', advance: '', status: 'PAID', employee_id: '' };
+  const [formData, setFormData] = useState(defaultState);
+  const [staff, setStaff] = useState([]);
+  const [filteredStaff, setFilteredStaff] = useState([]);
+  const [showDropdown, setShowDropdown] = useState(false);
   
   useEffect(() => {
-    if (editData) setFormData(editData);
-    else setFormData({ name: '', designation: '', department: 'Teaching', salary: '', status: 'PAID' });
+    if (isOpen) {
+      if (editData) setFormData(editData);
+      else setFormData(defaultState);
+
+      // Fetch employees for autocomplete
+      api.get('/employees').then(res => {
+        const list = res.data?.data ?? res.data ?? [];
+        setStaff(list);
+      }).catch(err => console.error('Error fetching staff:', err));
+    }
   }, [editData, isOpen]);
+
+  const handleNameChange = (val) => {
+    setFormData({ ...formData, name: val, employee_id: '' });
+    if (val.length > 1) {
+      const matches = staff.filter(s => 
+        (s.name && s.name.toLowerCase().includes(val.toLowerCase())) || 
+        (s.employee_id && s.employee_id.toLowerCase().includes(val.toLowerCase()))
+      );
+      setFilteredStaff(matches.slice(0, 5));
+      setShowDropdown(true);
+    } else {
+      setShowDropdown(false);
+    }
+  };
+
+  const selectEmployee = (s) => {
+    setFormData({
+      ...formData,
+      name: s.name,
+      employee_id: s.employee_id || `EMP-${s.id}`,
+      designation: s.designation || s.role || 'Staff',
+      department: s.department || s.role || 'Staff',
+      salary: s.salary || ''
+    });
+    setShowDropdown(false);
+  };
 
   if (!isOpen) return null;
 
@@ -258,11 +309,33 @@ const SalaryModal = ({ isOpen, onClose, onSave, editData }) => {
         </div>
         <div className="p-6 space-y-4">
           <div className="grid grid-cols-2 gap-4">
-            <div className="col-span-2"><label className="text-[10px] font-black text-[#64748b] uppercase tracking-widest mb-1 block">Employee Name</label><input className={inputClass} value={formData.name} onChange={e=>setFormData({...formData, name: e.target.value})} placeholder="Ajay Kumar" /></div>
+            <div className="col-span-2 relative">
+              <label className="text-[10px] font-black text-[#64748b] uppercase tracking-widest mb-1 block">Search Employee (Name or ID)</label>
+              <div className="relative">
+                <input className={inputClass} placeholder="Type name to search..." value={formData.name} onChange={e => handleNameChange(e.target.value)} onFocus={() => formData.name.length > 1 && setShowDropdown(true)} />
+                {formData.employee_id ? <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center"><div className="w-2 h-2 rounded-full bg-indigo-500 mr-2"></div><span className="text-[8px] font-black text-indigo-500 uppercase">{formData.employee_id}</span></div> : null}
+              </div>
+              
+              {showDropdown && filteredStaff.length > 0 && (
+                <div className="absolute z-50 left-0 right-0 mt-1 bg-white dark:bg-[#0f172a] border border-gray-200 dark:border-[#334155] rounded-lg shadow-xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+                  {filteredStaff.map(s => (
+                    <button key={s.id} onClick={() => selectEmployee(s)} className="w-full px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-white/5 border-b border-gray-100 dark:border-[#334155] last:border-0 flex justify-between items-center transition-colors">
+                      <div>
+                        <p className="text-[11px] font-black text-[var(--text-primary)]">{s.name}</p>
+                        <p className="text-[9px] font-bold text-[#64748b]">{s.employee_id || `ID: ${s.id}`}</p>
+                      </div>
+                      <span className="text-[9px] font-black text-indigo-500 bg-indigo-50 dark:bg-indigo-500/10 px-2 py-0.5 rounded">{s.designation || s.role || 'Staff'}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <div><label className="text-[10px] font-black text-[#64748b] uppercase tracking-widest mb-1 block">Designation</label><input className={inputClass} value={formData.designation} onChange={e=>setFormData({...formData, designation: e.target.value})} placeholder="MATH TEACHER" /></div>
             <div><label className="text-[10px] font-black text-[#64748b] uppercase tracking-widest mb-1 block">Department</label><select className={inputClass} value={formData.department} onChange={e=>setFormData({...formData, department: e.target.value})}><option>Teaching</option><option>Office</option><option>Staff</option></select></div>
             <div><label className="text-[10px] font-black text-[#64748b] uppercase tracking-widest mb-1 block">Monthly Salary</label><input className={inputClass} value={formData.salary} onChange={e=>setFormData({...formData, salary: e.target.value})} placeholder="20000" /></div>
+            <div><label className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-1 block">Advance Salary (Addition)</label><input className={`${inputClass} border-emerald-200 dark:border-emerald-900 text-emerald-500 font-black`} value={formData.advance} onChange={e=>setFormData({...formData, advance: e.target.value})} placeholder="0.00" /></div>
             <div><label className="text-[10px] font-black text-[#64748b] uppercase tracking-widest mb-1 block">Payment Status</label><select className={inputClass} value={formData.status} onChange={e=>setFormData({...formData, status: e.target.value})}><option>PAID</option><option>PENDING</option></select></div>
+            <div><label className="text-[10px] font-black text-[#64748b] uppercase tracking-widest mb-1 block">Total Payable (Auto circular)</label><div className={`${inputClass} bg-gray-50 dark:bg-white/5 flex items-center font-black text-indigo-500`}>₹{(parseFloat(formData.salary || 0) + parseFloat(formData.advance || 0)).toLocaleString()}</div></div>
           </div>
         </div>
         <div className="px-6 py-4 flex justify-end space-x-2 border-t border-gray-200 dark:border-[#334155] bg-gray-50 dark:bg-[#1a2234]">

@@ -62,7 +62,59 @@ const Field = ({ label, children }) => (
 const inputCls = `w-full h-10 px-3 bg-gray-50 dark:bg-[#10162A] border border-gray-200 dark:border-[#334155] rounded text-xs font-bold text-[var(--text-primary)] placeholder:text-slate-400 focus:outline-none focus:border-[#10b981] transition-colors`;
 const selectCls = `w-full h-10 px-3 bg-gray-50 dark:bg-[#10162A] border border-gray-200 dark:border-[#334155] rounded text-xs font-bold text-[var(--text-primary)] focus:outline-none focus:border-[#10b981] transition-colors appearance-none cursor-pointer`;
 
-/* Dynamic dropdown wrapper */
+/* Dynamic dropdown with + Create New Option */
+const CreativeSelect = ({ name, value, onChange, options, placeholder, isNew, setIsNew }) => {
+  return (
+    <div className="space-y-2">
+      <div className="relative">
+        <select 
+          name={name} 
+          value={isNew ? 'CREATE_NEW' : value} 
+          onChange={(e) => {
+            if (e.target.value === 'CREATE_NEW') {
+              setIsNew(true);
+              onChange({ target: { name, value: '' } });
+            } else {
+              setIsNew(false);
+              onChange(e);
+            }
+          }} 
+          className={selectCls}
+        >
+          <option value="">{placeholder || `-- Select Option --`}</option>
+          {options.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
+          <option value="CREATE_NEW" className="font-black text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 italic">+ CREATE NEW</option>
+        </select>
+        {!isNew && (
+          <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
+            <svg width="10" height="6" viewBox="0 0 10 6" fill="none"><path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </div>
+        )}
+      </div>
+      {isNew && (
+        <div className="flex items-center space-x-2 animate-in slide-in-from-top-1 duration-200">
+          <input 
+            type="text" 
+            name={name} 
+            value={value} 
+            onChange={onChange} 
+            placeholder="Type new name here..." 
+            className={`${inputCls} flex-1 border-blue-400 dark:border-blue-500`}
+            autoFocus 
+          />
+          <button 
+            type="button"
+            onClick={() => setIsNew(false)} 
+            className="h-10 px-3 flex items-center justify-center bg-gray-100 dark:bg-[#10162A] border border-gray-200 dark:border-[#334155] rounded hover:bg-red-50 dark:hover:bg-red-900/10 text-red-500 transition-colors"
+          >
+            <X size={14} strokeWidth={3} />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const DynSelect = ({ name, value, onChange, options, placeholder }) => (
   <div className="relative">
     <select name={name} value={value} onChange={onChange} className={selectCls}>
@@ -76,14 +128,15 @@ const DynSelect = ({ name, value, onChange, options, placeholder }) => (
 );
 
 /* ══════════════════════════════════════
-   1. ADD CLASS
+    1. ADD CLASS
 ══════════════════════════════════════ */
 const defaultClass = { name: '', teacher: '', students: 0, status: 'ACTIVE' };
 
-export const AddClassModal = ({ isOpen, onClose, onSave, teachers = [] }) => {
+export const AddClassModal = ({ isOpen, onClose, onSave, teachers = [], classNames = [] }) => {
   const [form, setForm] = useState(defaultClass);
+  const [isNew, setIsNew] = useState(false);
   const ch = (e) => setForm({ ...form, [e.target.name]: e.target.value });
-  const reset = () => setForm(defaultClass);
+  const reset = () => { setForm(defaultClass); setIsNew(false); };
 
   return (
     <ModalWrapper isOpen={isOpen} onClose={() => { reset(); onClose(); }}
@@ -93,7 +146,15 @@ export const AddClassModal = ({ isOpen, onClose, onSave, teachers = [] }) => {
       onSave={() => { onSave({ ...form, students: Number(form.students) }); reset(); onClose(); }}>
       <div className="grid grid-cols-1 gap-5">
         <Field label="Class Name *">
-          <input type="text" name="name" value={form.name} onChange={ch} placeholder="e.g. Playgroup, LKG, Class 5" className={inputCls} />
+          <CreativeSelect 
+            name="name" 
+            value={form.name} 
+            onChange={ch} 
+            options={classNames} 
+            placeholder="Select Class Name" 
+            isNew={isNew} 
+            setIsNew={setIsNew} 
+          />
         </Field>
         <Field label="Class Teacher">
           {teachers.length > 0 ? (
@@ -116,7 +177,7 @@ export const AddClassModal = ({ isOpen, onClose, onSave, teachers = [] }) => {
 /* ══════════════════════════════════════
    1b. EDIT CLASS
 ══════════════════════════════════════ */
-export const EditClassModal = ({ isOpen, onClose, data, onSave, teachers = [] }) => {
+export const EditClassModal = ({ isOpen, onClose, data, onSave, teachers = [], classNames = [] }) => {
   const [form, setForm] = useState({});
   useEffect(() => { if (data) setForm({ ...data }); }, [data]);
   const ch = (e) => setForm({ ...form, [e.target.name]: e.target.value });
@@ -129,7 +190,17 @@ export const EditClassModal = ({ isOpen, onClose, data, onSave, teachers = [] })
       onSave={() => { onSave({ ...form, students: Number(form.students) }); onClose(); }}>
       <div className="grid grid-cols-1 gap-5">
         <Field label="Class Name *">
-          <input type="text" name="name" value={form.name || ''} onChange={ch} className={inputCls} />
+          <input 
+            type="text" 
+            name="name" 
+            value={form.name || ''} 
+            onChange={ch} 
+            list="available-classes-edit"
+            className={inputCls} 
+          />
+          <datalist id="available-classes-edit">
+            {classNames.map((c, i) => <option key={i} value={c} />)}
+          </datalist>
         </Field>
         <Field label="Class Teacher">
           {teachers.length > 0 ? (
@@ -152,37 +223,55 @@ export const EditClassModal = ({ isOpen, onClose, data, onSave, teachers = [] })
 /* ══════════════════════════════════════
    2. ADD SUBJECT
 ══════════════════════════════════════ */
-const defaultSubject = { name: '', type: 'THEORY', classes: '', credits: 0 };
+const defaultSubject = { name: '', type: 'THEORY', classes: '', teacher: '' };
 
-export const AddSubjectModal = ({ isOpen, onClose, onSave, classNames = [] }) => {
+export const AddSubjectModal = ({ isOpen, onClose, onSave, classNames = [], teachers = [], subjectNames = [] }) => {
   const [form, setForm] = useState(defaultSubject);
+  const [isNewClass, setIsNewClass] = useState(false);
+  const [isNewSubject, setIsNewSubject] = useState(false);
   const ch = (e) => setForm({ ...form, [e.target.name]: e.target.value });
-  const reset = () => setForm(defaultSubject);
+  const reset = () => { setForm(defaultSubject); setIsNewClass(false); setIsNewSubject(false); };
 
   return (
     <ModalWrapper isOpen={isOpen} onClose={() => { reset(); onClose(); }}
       title="Add New Subject" icon={BookOpen}
       iconColor="text-[#06b6d4]" iconBg="bg-[#06b6d4]/15"
       saveBtnColor="bg-[#06b6d4] hover:bg-[#0891b2]"
-      onSave={() => { onSave({ ...form, credits: Number(form.credits) }); reset(); onClose(); }}>
+      onSave={() => { onSave({ ...form }); reset(); onClose(); }}>
       <div className="grid grid-cols-1 gap-5">
         <Field label="Subject Name *">
-          <input type="text" name="name" value={form.name} onChange={ch} placeholder="e.g. Mathematics" className={inputCls} />
+          <CreativeSelect 
+            name="name" 
+            value={form.name} 
+            onChange={ch} 
+            options={subjectNames} 
+            placeholder="Select Subject" 
+            isNew={isNewSubject} 
+            setIsNew={setIsNewSubject} 
+          />
         </Field>
         <div className="grid grid-cols-2 gap-4">
           <Field label="Type">
             <DynSelect name="type" value={form.type} onChange={ch} options={['THEORY', 'PRACTICAL', 'ACTIVITY']} />
           </Field>
-          <Field label="Credits">
-            <input type="number" name="credits" value={form.credits} onChange={ch} min="0" className={inputCls} />
+          <Field label="Assigned Teacher">
+            {teachers.length > 0 ? (
+              <DynSelect name="teacher" value={form.teacher} onChange={ch} options={teachers} placeholder="-- Select Teacher --" />
+            ) : (
+              <input type="text" name="teacher" value={form.teacher} onChange={ch} placeholder="Teacher name" className={inputCls} />
+            )}
           </Field>
         </div>
         <Field label="Assigned Classes">
-          {classNames.length > 0 ? (
-            <DynSelect name="classes" value={form.classes} onChange={ch} options={classNames} placeholder="-- Select Class --" />
-          ) : (
-            <input type="text" name="classes" value={form.classes} onChange={ch} placeholder="e.g. Playgroup, Class 1" className={inputCls} />
-          )}
+          <CreativeSelect 
+            name="classes" 
+            value={form.classes} 
+            onChange={ch} 
+            options={classNames} 
+            placeholder="Select Class" 
+            isNew={isNewClass} 
+            setIsNew={setIsNewClass} 
+          />
         </Field>
       </div>
     </ModalWrapper>
@@ -192,8 +281,10 @@ export const AddSubjectModal = ({ isOpen, onClose, onSave, classNames = [] }) =>
 /* ══════════════════════════════════════
    2b. EDIT SUBJECT
 ══════════════════════════════════════ */
-export const EditSubjectModal = ({ isOpen, onClose, data, onSave, classNames = [] }) => {
+export const EditSubjectModal = ({ isOpen, onClose, data, onSave, classNames = [], teachers = [], subjectNames = [] }) => {
   const [form, setForm] = useState({});
+  const [isNewClass, setIsNewClass] = useState(false);
+  const [isNewSubject, setIsNewSubject] = useState(false);
   useEffect(() => { if (data) setForm({ ...data }); }, [data]);
   const ch = (e) => setForm({ ...form, [e.target.name]: e.target.value });
 
@@ -202,25 +293,41 @@ export const EditSubjectModal = ({ isOpen, onClose, data, onSave, classNames = [
       title="Update Subject Record" icon={Edit}
       iconColor="text-[#eab308]" iconBg="bg-[#eab308]/15"
       saveBtnColor="bg-[#eab308] hover:bg-[#ca8a04]" saveLabel="Update"
-      onSave={() => { onSave({ ...form, credits: Number(form.credits) }); onClose(); }}>
+      onSave={() => { onSave({ ...form }); onClose(); }}>
       <div className="grid grid-cols-1 gap-5">
         <Field label="Subject Name *">
-          <input type="text" name="name" value={form.name || ''} onChange={ch} className={inputCls} />
+          <CreativeSelect 
+            name="name" 
+            value={form.name || ''} 
+            onChange={ch} 
+            options={subjectNames} 
+            placeholder="Select Subject" 
+            isNew={isNewSubject} 
+            setIsNew={setIsNewSubject} 
+          />
         </Field>
         <div className="grid grid-cols-2 gap-4">
           <Field label="Type">
             <DynSelect name="type" value={form.type || 'THEORY'} onChange={ch} options={['THEORY', 'PRACTICAL', 'ACTIVITY']} />
           </Field>
-          <Field label="Credits">
-            <input type="number" name="credits" value={form.credits || ''} onChange={ch} className={inputCls} />
+          <Field label="Assigned Teacher">
+            {teachers.length > 0 ? (
+              <DynSelect name="teacher" value={form.teacher || ''} onChange={ch} options={teachers} placeholder="-- Select Teacher --" />
+            ) : (
+              <input type="text" name="teacher" value={form.teacher || ''} onChange={ch} placeholder="Teacher name" className={inputCls} />
+            )}
           </Field>
         </div>
         <Field label="Assigned Classes">
-          {classNames.length > 0 ? (
-            <DynSelect name="classes" value={form.classes || ''} onChange={ch} options={classNames} placeholder="-- Select Class --" />
-          ) : (
-            <input type="text" name="classes" value={form.classes || ''} onChange={ch} className={inputCls} />
-          )}
+          <CreativeSelect 
+            name="classes" 
+            value={form.classes || ''} 
+            onChange={ch} 
+            options={classNames} 
+            placeholder="Select Class" 
+            isNew={isNewClass} 
+            setIsNew={setIsNewClass} 
+          />
         </Field>
       </div>
     </ModalWrapper>
@@ -234,8 +341,9 @@ const defaultSyllabus = { subject: '', chapter: '', teacher: '', progress: 0, da
 
 export const AddSyllabusModal = ({ isOpen, onClose, onSave, teachers = [], classNames = [] }) => {
   const [form, setForm] = useState(defaultSyllabus);
+  const [isNew, setIsNew] = useState(false);
   const ch = (e) => setForm({ ...form, [e.target.name]: e.target.value });
-  const reset = () => setForm(defaultSyllabus);
+  const reset = () => { setForm(defaultSyllabus); setIsNew(false); };
 
   return (
     <ModalWrapper isOpen={isOpen} onClose={() => { reset(); onClose(); }}
@@ -245,11 +353,15 @@ export const AddSyllabusModal = ({ isOpen, onClose, onSave, teachers = [], class
       onSave={() => { onSave({ ...form, progress: Number(form.progress) }); reset(); onClose(); }}>
       <div className="grid grid-cols-1 gap-5">
         <Field label="Subject / Class *">
-          {classNames.length > 0 ? (
-            <DynSelect name="subject" value={form.subject} onChange={ch} options={classNames} placeholder="-- Select Class --" />
-          ) : (
-            <input type="text" name="subject" value={form.subject} onChange={ch} placeholder="e.g. Math (Class 5)" className={inputCls} />
-          )}
+          <CreativeSelect 
+            name="subject" 
+            value={form.subject} 
+            onChange={ch} 
+            options={classNames} 
+            placeholder="Select Class" 
+            isNew={isNew} 
+            setIsNew={setIsNew} 
+          />
         </Field>
         <Field label="Chapter / Topic *">
           <input type="text" name="chapter" value={form.chapter} onChange={ch} placeholder="Chapter Name" className={inputCls} />
@@ -351,9 +463,6 @@ export const AddAcademicEventModal = ({ isOpen, onClose, onSave }) => {
             <DynSelect name="status" value={form.status} onChange={ch} options={['Upcoming', 'Ongoing', 'Completed']} />
           </Field>
         </div>
-        <Field label="Description (Optional)">
-          <textarea name="description" value={form.description} onChange={ch} rows={2} placeholder="Short description..." className="w-full px-3 py-2 bg-gray-50 dark:bg-[#10162A] border border-gray-200 dark:border-[#334155] rounded text-xs font-bold text-[var(--text-primary)] placeholder:text-slate-400 focus:outline-none focus:border-[#f59e0b] resize-none transition-colors" />
-        </Field>
       </div>
     </ModalWrapper>
   );
@@ -396,12 +505,13 @@ export const EditEventModal = ({ isOpen, onClose, data, onSave }) => {
 /* ══════════════════════════════════════
    5. ADD PARENT EVENT
 ══════════════════════════════════════ */
-const defaultParentEvent = { name: '', date: '', type: 'Event', description: '' };
+const defaultParentEvent = { name: '', date: '', type: 'Event', description: '', targetClass: '' };
 
-export const AddParentEventModal = ({ isOpen, onClose, onSave }) => {
+export const AddParentEventModal = ({ isOpen, onClose, onSave, eventTypes = [], classNames = [] }) => {
   const [form, setForm] = useState(defaultParentEvent);
+  const [isNewType, setIsNewType] = useState(false);
   const ch = (e) => setForm({ ...form, [e.target.name]: e.target.value });
-  const reset = () => setForm(defaultParentEvent);
+  const reset = () => { setForm(defaultParentEvent); setIsNewType(false); };
 
   return (
     <ModalWrapper isOpen={isOpen} onClose={() => { reset(); onClose(); }}
@@ -415,16 +525,78 @@ export const AddParentEventModal = ({ isOpen, onClose, onSave }) => {
       }}>
       <div className="grid grid-cols-1 gap-5">
         <Field label="Event Title *">
-          <input type="text" name="name" value={form.name} onChange={ch} placeholder="Event Name" className={inputCls} />
+          <input type="text" name="name" value={form.name} onChange={ch} placeholder="e.g. Annual Parent Teacher Meeting" className={inputCls} />
         </Field>
-        <Field label="Date *">
-          <input type="date" name="date" value={form.date} onChange={ch} className={inputCls} />
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Starting Date *">
+            <input type="date" name="date" value={form.date} onChange={ch} className={inputCls} />
+          </Field>
+          <Field label="Closing Date">
+            <input type="date" name="end_date" value={form.end_date || ''} onChange={ch} className={inputCls} />
+          </Field>
+        </div>
+        <Field label="Target Class (Optional - Blank for All)">
+          <DynSelect name="targetClass" value={form.targetClass} onChange={ch} options={classNames} placeholder="-- All Classes --" />
         </Field>
         <Field label="Type">
-          <DynSelect name="type" value={form.type} onChange={ch} options={['Event', 'Meeting', 'Holiday', 'Exam', 'Sports']} />
+          <CreativeSelect 
+            name="type" 
+            value={form.type} 
+            onChange={ch} 
+            options={eventTypes} 
+            placeholder="Select Type" 
+            isNew={isNewType} 
+            setIsNew={setIsNewType} 
+          />
         </Field>
         <Field label="Description (Optional)">
           <textarea name="description" value={form.description} onChange={ch} rows={3} placeholder="Short description..." className="w-full px-3 py-2 bg-gray-50 dark:bg-[#10162A] border border-gray-200 dark:border-[#334155] rounded text-xs font-bold text-[var(--text-primary)] placeholder:text-slate-400 focus:outline-none focus:border-[#6366f1] resize-none transition-colors" />
+        </Field>
+      </div>
+    </ModalWrapper>
+  );
+};
+
+export const EditParentEventModal = ({ isOpen, onClose, data, onSave, eventTypes = [], classNames = [] }) => {
+  const [form, setForm] = useState({});
+  const [isNewType, setIsNewType] = useState(false);
+  useEffect(() => { if (data) setForm({ ...data }); }, [data]);
+  const ch = (e) => setForm({ ...form, [e.target.name]: e.target.value });
+
+  return (
+    <ModalWrapper isOpen={isOpen} onClose={onClose}
+      title="Update Parent Event" icon={Edit}
+      iconColor="text-[#eab308]" iconBg="bg-[#eab308]/15"
+      saveBtnColor="bg-[#eab308] hover:bg-[#ca8a04]" saveLabel="Update"
+      onSave={() => { onSave(form); onClose(); }}>
+      <div className="grid grid-cols-1 gap-5">
+        <Field label="Event Title *">
+          <input type="text" name="name" value={form.name || ''} onChange={ch} placeholder="Event Name" className={inputCls} />
+        </Field>
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Starting Date *">
+            <input type="date" name="date" value={form.date || ''} onChange={ch} className={inputCls} />
+          </Field>
+          <Field label="Closing Date">
+            <input type="date" name="end_date" value={form.end_date || ''} onChange={ch} className={inputCls} />
+          </Field>
+        </div>
+        <Field label="Target Class (Optional - Blank for All)">
+          <DynSelect name="targetClass" value={form.targetClass || ''} onChange={ch} options={classNames} placeholder="-- All Classes --" />
+        </Field>
+        <Field label="Type">
+          <CreativeSelect 
+            name="type" 
+            value={form.type || 'Event'} 
+            onChange={ch} 
+            options={eventTypes} 
+            placeholder="Select Type" 
+            isNew={isNewType} 
+            setIsNew={setIsNewType} 
+          />
+        </Field>
+        <Field label="Description (Optional)">
+          <textarea name="description" value={form.description || ''} onChange={ch} rows={3} className="w-full px-3 py-2 bg-gray-50 dark:bg-[#10162A] border border-gray-200 dark:border-[#334155] rounded text-xs font-bold text-[var(--text-primary)] placeholder:text-slate-400 focus:outline-none focus:border-[#eab308] resize-none transition-colors" />
         </Field>
       </div>
     </ModalWrapper>

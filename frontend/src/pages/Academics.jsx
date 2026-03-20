@@ -20,7 +20,7 @@ import {
   EditSubjectModal, AddSubjectModal,
   EditSyllabusModal, AddSyllabusModal,
   EditEventModal, AddAcademicEventModal,
-  AddParentEventModal
+  AddParentEventModal, EditParentEventModal
 } from '../components/AcademicModals';
 
 const tabs = [
@@ -41,6 +41,8 @@ const Academics = () => {
   const [loading, setLoading] = useState(true);
   const [teachers, setTeachers] = useState([]);   // for dropdowns
   const [classNames, setClassNames] = useState([]); // for dropdowns
+  const [subjectNames, setSubjectNames] = useState([]); // for dropdowns
+  const [parentEventTypes, setParentEventTypes] = useState([]); // for dropdowns
 
   const [selectedItem, setSelectedItem] = useState(null);
   const [search, setSearch] = useState('');
@@ -52,16 +54,19 @@ const Academics = () => {
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [cr, sr, syr, er, empr] = await Promise.allSettled([
+      const results = await Promise.allSettled([
         api.get('/academic-classes'),
         api.get('/academic-subjects'),
         api.get('/academic-syllabi'),
         api.get('/academic-events'),
         api.get('/employees'),
+        api.get('/parent-events'),
       ]);
 
-      if (cr.status === 'fulfilled') {
-        const list = (cr.value.data?.data ?? cr.value.data ?? []).map(c => ({
+      // 0: Classes
+      if (results[0].status === 'fulfilled') {
+        const cData = results[0].value.data?.data ?? results[0].value.data ?? [];
+        const list = cData.map(c => ({
           rawId: c.id,
           id: c.class_id ?? `CLS-${c.id}`,
           name: c.name ?? 'N/A',
@@ -72,20 +77,27 @@ const Academics = () => {
         setClassesList(list);
         setClassNames([...new Set(list.map(c => c.name).filter(Boolean))]);
       }
-      if (sr.status === 'fulfilled') {
-        const list = (sr.value.data?.data ?? sr.value.data ?? []).map(s => ({
+
+      // 1: Subjects
+      if (results[1].status === 'fulfilled') {
+        const sData = results[1].value.data?.data ?? results[1].value.data ?? [];
+        const list = sData.map(s => ({
           rawId: s.id,
           id: s.sub_code ?? `SUB-${s.id}`,
           name: s.name ?? 'N/A',
           type: s.type ?? 'THEORY',
           classes: s.classes ?? 'N/A',
-          credits: s.credits ?? 0,
+          teacher: s.teacher ?? 'N/A',
           status: s.status ?? 'ACTIVE'
         }));
         setSubjectsList(list);
+        setSubjectNames([...new Set(list.map(s => s.name).filter(Boolean))]);
       }
-      if (syr.status === 'fulfilled') {
-        const list = (syr.value.data?.data ?? syr.value.data ?? []).map(s => ({
+
+      // 2: Syllabus
+      if (results[2].status === 'fulfilled') {
+        const syData = results[2].value.data?.data ?? results[2].value.data ?? [];
+        const list = syData.map(s => ({
           rawId: s.id,
           id: s.plan_id ?? `SYL-${s.id}`,
           subject: s.subject ?? s.name ?? 'N/A',
@@ -96,8 +108,11 @@ const Academics = () => {
         }));
         setSyllabusList(list);
       }
-      if (er.status === 'fulfilled') {
-        const list = (er.value.data?.data ?? er.value.data ?? []).map(e => ({
+
+      // 3: Academic Events
+      if (results[3].status === 'fulfilled') {
+        const eData = results[3].value.data?.data ?? results[3].value.data ?? [];
+        const list = eData.map(e => ({
           rawId: e.id,
           id: e.event_id ?? `EVT-${e.id}`,
           name: e.title ?? e.name ?? 'N/A',
@@ -107,9 +122,29 @@ const Academics = () => {
         }));
         setAcademicEventsList(list);
       }
-      if (empr.status === 'fulfilled') {
-        const empList = (empr.value.data?.data ?? empr.value.data ?? []).map(e => e.name ?? e.employee_name).filter(Boolean);
+
+      // 4: Employees (Teachers)
+      if (results[4].status === 'fulfilled') {
+        const empData = results[4].value.data?.data ?? results[4].value.data ?? [];
+        const empList = empData.map(e => e.name ?? e.employee_name).filter(Boolean);
         setTeachers([...new Set(empList)]);
+      }
+
+      // 5: Parent Events
+      if (results[5].status === 'fulfilled') {
+        const pData = results[5].value.data?.data ?? results[5].value.data ?? [];
+        const list = pData.map(p => ({
+          rawId: p.id,
+          id: p.event_id ?? `PE-${p.id}`,
+          name: p.title ?? 'N/A',
+          date: p.date ? p.date.split('T')[0] : '',
+          endDate: p.end_date ? p.end_date.split('T')[0] : '',
+          type: p.type ?? 'N/A',
+          targetClass: p.target_class ?? 'All Classes',
+          description: p.description ?? ''
+        }));
+        setParentEventsList(list);
+        setParentEventTypes([...new Set(['Event', 'Meeting', 'Holiday', 'Exam', 'Sports', ...list.map(p => p.type).filter(Boolean)])]);
       }
     } catch (err) {
       console.error('Academics fetch error:', err);
@@ -119,6 +154,46 @@ const Academics = () => {
   }, []);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
+  
+  const handleExportCSV = () => {
+    let headers = [];
+    let rows = [];
+    let filename = 'academic_export.csv';
+
+    if (activeTab === 'classes') {
+      headers = ['Class ID', 'Class Name', 'Coordinator', 'Students', 'Status'];
+      rows = classesList.map(c => [c.id, c.name, c.teacher, c.students, c.status]);
+      filename = 'classes_report.csv';
+    } else if (activeTab === 'subjects') {
+      headers = ['Sub Code', 'Subject Name', 'Type', 'Classes', 'Teacher', 'Status'];
+      rows = subjectsList.map(s => [s.id, s.name, s.type, s.classes, s.teacher, s.status]);
+      filename = 'subjects_report.csv';
+    } else if (activeTab === 'syllabus') {
+      headers = ['Plan ID', 'Subject', 'Chapter', 'Teacher', 'Progress %', 'Target Date'];
+      rows = syllabusList.map(s => [s.id, s.subject, s.chapter, s.teacher, s.progress, s.date]);
+      filename = 'syllabus_plans.csv';
+    } else if (activeTab === 'academic') {
+      headers = ['Event ID', 'Title', 'Date', 'Type', 'Status'];
+      rows = academicEventsList.map(e => [e.id, e.name, e.date, e.category, e.status]);
+      filename = 'academic_events.csv';
+    } else if (activeTab === 'parent') {
+      headers = ['Event ID', 'Title', 'Start Date', 'End Date', 'Type'];
+      rows = parentEventsList.map(p => [p.id, p.name, p.date, p.endDate, p.type]);
+      filename = 'parent_events.csv';
+    }
+
+    if (rows.length === 0) return;
+
+    const csv = [headers, ...rows].map(row => row.map(cell => `"${cell || ''}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   const openModal = (type, row = null) => { setSelectedItem(row); setModals(prev => ({ ...prev, [type]: true })); };
   const closeModal = (type) => setModals(prev => ({ ...prev, [type]: false }));
@@ -147,14 +222,15 @@ const Academics = () => {
   // ── SUBJECTS CRUD ──
   const handleAddSubject = async (data) => {
     try {
-      const res = await api.post('/academic-subjects', { name: data.name, type: data.type, classes: data.classes, credits: data.credits });
+      const res = await api.post('/academic-subjects', { name: data.name, type: data.type, classes: data.classes, teacher: data.teacher });
       const s = res.data;
-      setSubjectsList(prev => [{ rawId: s.id, id: s.sub_code ?? `SUB-${s.id}`, name: s.name, type: s.type, classes: s.classes, credits: s.credits }, ...prev]);
+      setSubjectsList(prev => [{ rawId: s.id, id: s.sub_code ?? `SUB-${s.id}`, name: s.name, type: s.type, classes: s.classes, teacher: s.teacher }, ...prev]);
+      setSubjectNames(prev => [...new Set([...prev, data.name])]);
     } catch(e) { alert('Failed: ' + (e.response?.data?.error || e.message)); }
   };
   const handleSaveSubject = async (data) => {
     try {
-      await api.put(`/academic-subjects/${data.rawId}`, { name: data.name, type: data.type, classes: data.classes, credits: data.credits });
+      await api.put(`/academic-subjects/${data.rawId}`, { name: data.name, type: data.type, classes: data.classes, teacher: data.teacher });
       setSubjectsList(prev => prev.map(s => s.rawId === data.rawId ? { ...s, ...data } : s));
     } catch(e) { alert('Failed: ' + (e.response?.data?.error || e.message)); }
   };
@@ -204,7 +280,38 @@ const Academics = () => {
     catch(e) { alert('Failed: ' + (e.response?.data?.error || e.message)); }
   };
 
-  const handleAddParentEvent = (data) => setParentEventsList(prev => [...prev, data]);
+  const handleAddParentEvent = async (data) => {
+    try {
+      const res = await api.post('/parent-events', { title: data.name, date: data.date, end_date: data.end_date, type: data.type, description: data.description, target_class: data.targetClass });
+      const p = res.data;
+      setParentEventsList(prev => [{
+        rawId: p.id,
+        id: p.event_id ?? `PE-${p.id}`,
+        name: p.title,
+        date: data.date,
+        endDate: data.end_date,
+        type: p.type,
+        targetClass: p.target_class ?? 'All Classes',
+        description: data.description
+      }, ...prev]);
+      setParentEventTypes(prev => [...new Set([...prev, data.type])]);
+    } catch(e) { alert('Failed: ' + (e.response?.data?.error || e.message)); }
+  };
+
+  const handleSaveParentEvent = async (data) => {
+    try {
+      await api.put(`/parent-events/${data.rawId}`, { title: data.name, date: data.date, end_date: data.end_date, type: data.type, description: data.description, target_class: data.targetClass });
+      setParentEventsList(prev => prev.map(e => e.rawId === data.rawId ? { ...e, ...data, endDate: data.end_date } : e));
+    } catch(e) { alert('Failed: ' + (e.response?.data?.error || e.message)); }
+  };
+
+  const handleDeleteParentEvent = async (rawId) => {
+    if (!window.confirm('Delete this parent event?')) return;
+    try {
+      await api.delete(`/parent-events/${rawId}`);
+      setParentEventsList(prev => prev.filter(e => e.rawId !== rawId));
+    } catch(e) { alert('Failed: ' + (e.response?.data?.error || e.message)); }
+  };
 
   // ── FILTER helper ──
   const filterBySearch = (arr, keys) => {
@@ -227,8 +334,11 @@ const Academics = () => {
             <RefreshCw size={14} strokeWidth={2.5} className={`text-[#10b981] ${loading ? 'animate-spin' : ''}`} />
             <span>Refresh</span>
           </button>
-          <button className="flex items-center space-x-2 bg-[var(--bg-panel-alt)] border border-[var(--border-color)] text-[var(--text-secondary)] px-4 py-2 rounded-md transition-colors text-[11px] font-extrabold shadow-sm h-9">
-            <Download size={14} strokeWidth={2.5} /><span>Export</span>
+          <button 
+            onClick={handleExportCSV}
+            className="flex items-center space-x-2 bg-[var(--bg-panel-alt)] border border-[var(--border-color)] text-[var(--text-secondary)] px-4 py-2 rounded-md hover:bg-gray-50 dark:hover:bg-white/5 transition-colors text-[11px] font-extrabold shadow-sm h-9"
+          >
+            <Download size={14} strokeWidth={2.5} /><span>Export CSV</span>
           </button>
         </div>
       </div>
@@ -343,7 +453,7 @@ const Academics = () => {
                 <table className="w-full text-left border-collapse">
                   <thead className="sticky top-0 bg-[var(--bg-panel-alt)] z-10">
                     <tr className="border-y border-gray-200 dark:border-[#334155]">
-                      {['Sub Code','Subject Name','Type','Assigned Classes','Credits','Actions'].map(h => (
+                      {['Sub Code','Subject Name','Type','Assigned Classes','Teachers','Actions'].map(h => (
                         <th key={h} className="px-5 py-3 text-[9px] font-extrabold text-slate-500 dark:text-[#94a3b8] tracking-widest uppercase whitespace-nowrap last:text-right">{h}</th>
                       ))}
                     </tr>
@@ -357,7 +467,7 @@ const Academics = () => {
                         <td className="px-5 py-1.5 text-xs font-bold text-[var(--text-primary)]">{row.name}</td>
                         <td className="px-5 py-1.5 text-xs font-medium text-[var(--text-secondary)]">{row.type}</td>
                         <td className="px-5 py-1.5 text-xs font-medium text-[var(--text-secondary)] max-w-[180px] truncate">{row.classes}</td>
-                        <td className="px-5 py-1.5 text-xs font-bold text-[var(--text-primary)]">{row.credits}</td>
+                        <td className="px-5 py-1.5 text-xs font-bold text-[var(--text-primary)]">{row.teacher}</td>
                         <td className="px-5 py-1.5">
                           <div className="flex items-center justify-end space-x-1.5">
                             <button onClick={() => openModal('subject', row)} className="w-6 h-6 rounded flex items-center justify-center bg-white dark:bg-[#10162A] border border-[#eab308] text-[#eab308] hover:bg-[#eab308]/10 transition-colors"><Edit size={10} strokeWidth={2.5}/></button>
@@ -453,7 +563,7 @@ const Academics = () => {
                 <table className="w-full text-left border-collapse">
                   <thead className="sticky top-0 bg-[var(--bg-panel-alt)] z-10">
                     <tr className="border-y border-gray-200 dark:border-[#334155]">
-                      {['Event ID','Event Title','Date','Type','Actions'].map(h => (
+                      {['Event ID','Event Title','Target Class','Start Date','End Date','Type','Actions'].map(h => (
                         <th key={h} className="px-5 py-3 text-[9px] font-extrabold text-slate-500 dark:text-[#94a3b8] tracking-widest uppercase whitespace-nowrap last:text-right">{h}</th>
                       ))}
                     </tr>
@@ -462,14 +572,19 @@ const Academics = () => {
                     {filterBySearch(parentEventsList, ['name','type','id']).length === 0 ? (
                       <tr><td colSpan={5} className="text-center py-14 text-slate-400 text-sm font-bold">No parent events yet. Click "Add Event" to schedule one.</td></tr>
                     ) : filterBySearch(parentEventsList, ['name','type','id']).map(row => (
-                      <tr key={row.id} className="border-b border-gray-100 dark:border-[#334155] hover:bg-gray-50 dark:hover:bg-[#151c2e] transition-colors">
+                      <tr key={row.rawId} className="border-b border-gray-100 dark:border-[#334155] hover:bg-gray-50 dark:hover:bg-[#151c2e] transition-colors">
                         <td className="px-5 py-1.5 text-[11px] font-bold text-[#6366f1]">{row.id}</td>
                         <td className="px-5 py-1.5 text-xs font-bold text-[var(--text-primary)]">{row.name}</td>
+                        <td className="px-5 py-1.5">
+                          <span className="px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 border border-orange-200 dark:border-orange-800/50">{row.targetClass}</span>
+                        </td>
                         <td className="px-5 py-1.5 text-xs font-medium text-[var(--text-secondary)]">{row.date}</td>
+                        <td className="px-5 py-1.5 text-xs font-medium text-[var(--text-secondary)]">{row.endDate || '-'}</td>
                         <td className="px-5 py-1.5 text-xs font-medium text-[var(--text-secondary)]">{row.type}</td>
                         <td className="px-5 py-1.5">
                           <div className="flex items-center justify-end space-x-1.5">
-                            <button onClick={() => setParentEventsList(prev => prev.filter(e => e.id !== row.id))} className="w-6 h-6 rounded flex items-center justify-center bg-white dark:bg-[#10162A] border border-[#f43f5e] text-[#f43f5e] hover:bg-[#f43f5e]/10 transition-colors"><Trash2 size={10} strokeWidth={2.5}/></button>
+                            <button onClick={() => openModal('parentEvent', row)} className="w-6 h-6 rounded flex items-center justify-center bg-white dark:bg-[#10162A] border border-[#eab308] text-[#eab308] hover:bg-[#eab308]/10 transition-colors"><Edit size={10} strokeWidth={2.5}/></button>
+                            <button onClick={() => handleDeleteParentEvent(row.rawId)} className="w-6 h-6 rounded flex items-center justify-center bg-white dark:bg-[#10162A] border border-[#f43f5e] text-[#f43f5e] hover:bg-[#f43f5e]/10 transition-colors"><Trash2 size={10} strokeWidth={2.5}/></button>
                           </div>
                         </td>
                       </tr>
@@ -483,11 +598,11 @@ const Academics = () => {
       </div>
 
       {/* ── Modals ── */}
-      <AddClassModal isOpen={modals.addClass} onClose={() => closeModal('addClass')} onSave={handleAddClass} teachers={teachers} />
-      <EditClassModal isOpen={modals.class} onClose={() => closeModal('class')} data={selectedItem} onSave={handleSaveClass} teachers={teachers} />
+      <AddClassModal isOpen={modals.addClass} onClose={() => closeModal('addClass')} onSave={handleAddClass} teachers={teachers} classNames={classNames} />
+      <EditClassModal isOpen={modals.class} onClose={() => closeModal('class')} data={selectedItem} onSave={handleSaveClass} teachers={teachers} classNames={classNames} />
 
-      <AddSubjectModal isOpen={modals.addSubject} onClose={() => closeModal('addSubject')} onSave={handleAddSubject} classNames={classNames} />
-      <EditSubjectModal isOpen={modals.subject} onClose={() => closeModal('subject')} data={selectedItem} onSave={handleSaveSubject} classNames={classNames} />
+      <AddSubjectModal isOpen={modals.addSubject} onClose={() => closeModal('addSubject')} onSave={handleAddSubject} classNames={classNames} teachers={teachers} subjectNames={subjectNames} />
+      <EditSubjectModal isOpen={modals.subject} onClose={() => closeModal('subject')} data={selectedItem} onSave={handleSaveSubject} classNames={classNames} teachers={teachers} subjectNames={subjectNames} />
 
       <AddSyllabusModal isOpen={modals.addSyllabus} onClose={() => closeModal('addSyllabus')} onSave={handleAddSyllabus} teachers={teachers} classNames={classNames} />
       <EditSyllabusModal isOpen={modals.syllabus} onClose={() => closeModal('syllabus')} data={selectedItem} onSave={handleSaveSyllabus} teachers={teachers} classNames={classNames} />
@@ -495,7 +610,8 @@ const Academics = () => {
       <AddAcademicEventModal isOpen={modals.addAcEvent} onClose={() => closeModal('addAcEvent')} onSave={handleAddAcEvent} />
       <EditEventModal isOpen={modals.event} onClose={() => closeModal('event')} data={selectedItem} onSave={handleSaveEvent} />
 
-      <AddParentEventModal isOpen={modals.addParentEvent} onClose={() => closeModal('addParentEvent')} onSave={handleAddParentEvent} />
+      <AddParentEventModal isOpen={modals.addParentEvent} onClose={() => closeModal('addParentEvent')} onSave={handleAddParentEvent} eventTypes={parentEventTypes} classNames={classNames} />
+      <EditParentEventModal isOpen={modals.parentEvent} onClose={() => closeModal('parentEvent')} data={selectedItem} onSave={handleSaveParentEvent} eventTypes={parentEventTypes} classNames={classNames} />
     </div>
   );
 };

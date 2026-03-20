@@ -3,6 +3,7 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\GenericApiController;
+use App\Http\Controllers\TransportController;
 use App\Models\Admin;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
@@ -12,6 +13,7 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Database\Schema\Blueprint;
+use App\Models\TransportVehicle;
 
 // ═══════════════════════════════════════
 // FILE PROXY (Bypass Symlink Restrictions)
@@ -25,6 +27,75 @@ Route::get('/storage-proxy/{path}', function ($path) {
     $type = mime_content_type($filePath);
     return response($file)->header('Content-Type', $type);
 })->where('path', '.*');
+
+// ═══════════════════════════════════════
+// LIBRARY PDF UPLOAD
+// ═══════════════════════════════════════
+Route::post('/library-pdf-upload', function (Request $request) {
+    try {
+        $request->validate([
+            'pdf' => 'required|file|mimes:pdf|max:153600', // 150MB max
+        ]);
+
+        $file = $request->file('pdf');
+        $originalName = pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME);
+        $safeName = preg_replace('/[^a-zA-Z0-9_\-]/', '_', $originalName);
+        $filename = $safeName . '_' . time() . '.pdf';
+
+        // Store in storage/app/public/library_pdfs
+        $path = $file->storeAs('library_pdfs', $filename, 'public');
+
+        // Build accessible URL via our storage-proxy
+        $url = url('/api/storage-proxy/library_pdfs/' . $filename);
+
+        return response()->json([
+            'success' => true,
+            'link'    => $url,
+            'filename'=> $filename,
+            'size'    => round($file->getSize() / 1024 / 1024, 2) . ' MB',
+        ]);
+    } catch (\Exception $e) {
+        return response()->json(['success' => false, 'error' => $e->getMessage()], 500);
+    }
+});
+
+// ═══════════════════════════════════════
+// REAL-TIME GPS TRACKING
+// ═══════════════════════════════════════
+Route::post('/live-gps-update', function (Request $request) {
+    try {
+        $request->validate([
+            'vehicle_id' => 'required', // can be reg_no or vehicle_id
+            'lat'        => 'required|numeric',
+            'lng'        => 'required|numeric',
+            'speed'      => 'nullable|numeric'
+        ]);
+
+        $vehicle = TransportVehicle::where('vehicle_id', $request->vehicle_id)
+            ->orWhere('reg_no', $request->vehicle_id)
+            ->first();
+
+        if (!$vehicle) return response()->json(['error' => 'Vehicle not found'], 404);
+
+        $vehicle->update([
+            'current_lat'           => $request->lat,
+            'current_lng'           => $request->lng,
+            'is_tracking'           => true,
+            'last_location_update'  => now(),
+        ]);
+
+        return response()->json(['success' => true, 'message' => 'Location logged']);
+    } catch (\Exception $e) {
+        return response()->json(['error' => $e->getMessage()], 500);
+    }
+});
+
+// For Admin: Get all live locations
+Route::get('/transport-locations', function () {
+    return response()->json(TransportVehicle::where('is_tracking', true)
+        ->where('last_location_update', '>=', now()->subMinutes(15))
+        ->get(['id', 'vehicle_id', 'reg_no', 'current_lat', 'current_lng', 'status', 'last_location_update']));
+});
 
 // ═══════════════════════════════════════
 // ADMIN LOGIN
@@ -66,6 +137,7 @@ Route::post('/admin-login', function (Request $request) {
 // ═══════════════════════════════════════
 // DASHBOARD STATS
 // ═══════════════════════════════════════
+Route::middleware('auth:sanctum')->group(function () {
 Route::get('/dashboard-stats', function () {
     try {
         $totalStudents  = DB::table('admissions')->count();
@@ -78,16 +150,18 @@ Route::get('/dashboard-stats', function () {
         $monthlyRevenue = 0;
         try {
             $monthlyRevenue = DB::table('transactions')
-                ->whereMonth('created_at', $currentMonth)
-                ->whereYear('created_at', $currentYear)
+                ->where('type', 'Income')
+                ->whereMonth('date', $currentMonth)
+                ->whereYear('date', $currentYear)
                 ->sum('amount');
         } catch (\Exception $e) { $monthlyRevenue = 0; }
 
         $lastMonthRevenue = 0;
         try {
             $lastMonthRevenue = DB::table('transactions')
-                ->whereMonth('created_at', $currentMonth - 1 > 0 ? $currentMonth - 1 : 12)
-                ->whereYear('created_at', $currentMonth - 1 > 0 ? $currentYear : $currentYear - 1)
+                ->where('type', 'Income')
+                ->whereMonth('date', $currentMonth - 1 > 0 ? $currentMonth - 1 : 12)
+                ->whereYear('date', $currentMonth - 1 > 0 ? $currentYear : $currentYear - 1)
                 ->sum('amount');
         } catch (\Exception $e) { $lastMonthRevenue = 0; }
 
@@ -97,25 +171,68 @@ Route::get('/dashboard-stats', function () {
         $revenueChange = ($revenueChangeValue >= 0 ? '+' : '') . $revenueChangeValue . '%';
 
         $activeStudents = DB::table('admissions')->where('status', 'Approved')->count();
+        $pendingStudents = DB::table('admissions')->where('status', 'Pending')->count();
+        $rejectedStudents = DB::table('admissions')->where('status', 'Rejected')->count();
+        $totalAdmissions = DB::table('admissions')->count();
+
         $attendancePct  = $totalStudents > 0 ? round(($activeStudents / $totalStudents) * 100, 1) : 0;
 
         $months    = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        $chartDataRaw = DB::table('transactions')
+            ->selectRaw('MONTH(created_at) as month, YEAR(created_at) as year, SUM(amount) as total')
+            ->where('created_at', '>=', now()->subMonths(5)->startOfMonth())
+            ->groupBy('year', 'month')
+            ->get();
+
         $chartData = [];
         for ($i = 5; $i >= 0; $i--) {
-            $m = $currentMonth - $i;
-            $y = $currentYear;
-            if ($m <= 0) { $m += 12; $y--; }
-            try {
-                $income = DB::table('transactions')->whereMonth('created_at', $m)->whereYear('created_at', $y)->sum('amount');
-            } catch (\Exception $e) { $income = 0; }
-            $chartData[] = ['name' => $months[$m - 1], 'revenue' => (int)$income, 'expenses' => (int)($income * 0.6)];
+            $date = now()->subMonths($i);
+            $mNum = $date->month;
+            $yNum = $date->year;
+            
+            $match = $chartDataRaw->first(fn($item) => $item->month == $mNum && $item->year == $yNum);
+            $income = $match ? (int)$match->total : 0;
+            
+            $chartData[] = [
+                'name' => $months[$mNum - 1], 
+                'revenue' => $income, 
+                'expenses' => (int)($income * 0.6)
+            ];
         }
 
-        $days = ['Mon','Tue','Wed','Thu','Fri'];
-        $attendanceData = array_map(fn($d) => [
-            'name'  => $d,
-            'value' => rand(max(60, $attendancePct - 5), min(100, $attendancePct + 5)),
-        ], $days);
+        $days      = ['Mon','Tue','Wed','Thu','Fri'];
+        $attendanceData = [];
+        try {
+            $attendanceRaw = DB::table('student_attendance')
+                ->selectRaw('DATE(attendance_date) as date, status, COUNT(*) as count')
+                ->where('attendance_date', '>=', now()->subDays(7))
+                ->groupBy('date', 'status')
+                ->get();
+            
+            // Organize by date
+            $grouped = $attendanceRaw->groupBy('date');
+            
+            $i = 0;
+            foreach ($grouped as $date => $logs) {
+                if ($i >= 5) break;
+                $total     = $logs->sum('count');
+                $present   = $logs->whereIn('status', ['Present', 'Late'])->sum('count');
+                $perc      = $total > 0 ? round(($present / $total) * 100, 1) : 0;
+                $dayName   = date('D', strtotime($date));
+                $attendanceData[] = ['name' => $dayName, 'value' => (int)$perc];
+                $i++;
+            }
+        } catch (\Exception $e) {}
+
+        // Fallback or fill if not enough data
+        if (count($attendanceData) < 5) {
+            $existingNames = array_column($attendanceData, 'name');
+            foreach ($days as $d) {
+                if (!in_array($d, $existingNames) && count($attendanceData) < 5) {
+                    $attendanceData[] = ['name' => $d, 'value' => (int)$attendancePct];
+                }
+            }
+        }
 
         $notices = [];
         try {
@@ -148,6 +265,10 @@ Route::get('/dashboard-stats', function () {
                 'monthlyRevenue' => $monthlyRevenue,
                 'revenueChange'  => $revenueChange,
                 'attendancePct'  => $attendancePct . '%',
+                'totalAdmissions'   => $totalAdmissions,
+                'approvedAdmissions' => $activeStudents,
+                'pendingAdmissions'  => $pendingStudents,
+                'rejectedAdmissions' => $rejectedStudents,
             ],
             'chartData'        => $chartData,
             'attendanceData'   => $attendanceData,
@@ -164,6 +285,7 @@ Route::get('/dashboard-stats', function () {
             'notices' => [],
         ], 200); // Return 200 with empty data to avoid frontend alert if possible, or just error
     }
+});
 });
 
 // ═══════════════════════════════════════
@@ -229,6 +351,64 @@ Route::middleware('auth:sanctum')->get('/sync-teachers', function () {
 });
 
 // ═══════════════════════════════════════
+// PARENT PROTECTED ZONE — Requires Token
+// ═══════════════════════════════════════
+Route::middleware('auth:sanctum')->group(function () {
+    Route::post('/register-push-token', function (Request $request) {
+        try {
+            $login_id = $request->login_id;
+            $token    = $request->push_token;
+            if (!$login_id || !$token) return response()->json(['error' => 'Missing data'], 400);
+
+            $updated = DB::table('parent_accounts')
+                ->where('login_id', $login_id)
+                ->update([
+                    'push_token' => $token,
+                    'updated_at' => now()
+                ]);
+
+            return response()->json(['message' => 'Token updated', 'success' => (bool)$updated]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    });
+
+    // Admin send notification to parents (kept here for consistency, or move to admin group)
+    Route::post('/parent-notifications', function (Request $request) {
+        try {
+            $validated = $request->validate([
+                'title'   => 'required|string',
+                'message' => 'required|string',
+                'type'    => 'required|in:NOTICE,MESSAGE',
+                'notice_id' => 'nullable|integer',
+                'recipient_login_id' => 'nullable' // null for broadcast
+            ]);
+
+            $notifId = DB::table('parent_notifications')->insertGetId([
+                'notice_id' => $validated['notice_id'] ?? null,
+                'type'      => $validated['type'],
+                'title'     => $validated['title'],
+                'message'   => $validated['message'],
+                'recipient_login_id' => $validated['recipient_login_id'],
+                'is_read'   => false,
+                'sent_by'   => 'Admin',
+                'created_at' => now(),
+                'updated_at' => now()
+            ]);
+
+            return response()->json(['success' => true, 'id' => $notifId]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    });
+
+    Route::delete('/parent-notifications/{id}', function ($id) {
+        DB::table('parent_notifications')->where('id', $id)->delete();
+        return response()->json(['success' => true]);
+    });
+});
+
+// ═══════════════════════════════════════
 // PARENT LOGIN & DASHBOARD — no auth
 // ═══════════════════════════════════════
 Route::post('/parent-login', function (Request $request) {
@@ -238,31 +418,56 @@ Route::post('/parent-login', function (Request $request) {
         if ($parent->status !== 'Active') {
             return response()->json(['message' => 'Account is ' . $parent->status], 403);
         }
-        $admission = DB::table('admissions')->where('contact_no', $parent->login_id)->first();
-        if ($admission && is_object($admission)) {
-            $parent->student_photo = isset($admission->student_photo) && $admission->student_photo
-                ? (str_starts_with($admission->student_photo, 'data:') ? $admission->student_photo : url($admission->student_photo))
-                : null;
-            $parent->parent_photo = isset($admission->parent_photo) && $admission->parent_photo
-                ? (str_starts_with($admission->parent_photo, 'data:') ? $admission->parent_photo : url($admission->parent_photo))
-                : null;
-        }
-        return response()->json($parent);
+        
+        // Find ALL linked students
+        $students = DB::table('admissions')
+            ->where('contact_no', $parent->login_id)
+            ->whereIn('status', ['Approved', 'Admitted']) // only active ones
+            ->get(['id', 'student_name', 'admitted_into_class', 'section', 'roll_no', 'student_photo'])
+            ->map(function ($s) {
+                return [
+                    'id'    => $s->id,
+                    'name'  => $s->student_name,
+                    'class' => $s->admitted_into_class,
+                    'section' => $s->section ?? 'A',
+                    'photo' => $s->student_photo ? (str_starts_with($s->student_photo, 'http') ? $s->student_photo : request()->getSchemeAndHttpHost() . '/api/storage-proxy' . str_replace('/storage', '', $s->student_photo)) : null
+                ];
+            });
+
+        // Set parent_photo URL matching mobile app expectation
+        $parent->parent_photo = $parent->photo_url 
+             ? (str_starts_with($parent->photo_url, 'http') ? $parent->photo_url : request()->getSchemeAndHttpHost() . '/api/storage-proxy' . str_replace('/storage', '', $parent->photo_url))
+             : null;
+
+        // Generate Token
+        $token = $parent->createToken('parent-mobile-app')->plainTextToken;
+
+        return response()->json([
+            'parent'       => $parent,
+            'students'     => $students,
+            'access_token' => $token
+        ]);
     }
     return response()->json(['message' => 'Invalid credentials'], 401);
 });
 
 
-Route::get('/parent-dashboard/{login_id}', function ($login_id) {
+Route::middleware('auth:sanctum')->get('/parent-dashboard/{login_id}', function (Request $request, $login_id) {
     try {
         $parent = ParentAccount::where('login_id', $login_id)->first();
         if (!$parent || $parent->status !== 'Active') {
             return response()->json(['error' => 'Unauthorized or Inactive account'], 403);
         }
 
-        $admission  = DB::table('admissions')->where('contact_no', $login_id)->first();
-        $class_name = $admission ? $admission->admitted_into_class : '';
-        $student_id = $admission ? $admission->id : null;
+        // Selected student ID or fallback to first student
+        $student_id = $request->query('student_id');
+        if (!$student_id) {
+            $firstStudent = DB::table('admissions')->where('contact_no', $login_id)->first();
+            $student_id = $firstStudent ? $firstStudent->id : null;
+        }
+
+        $admission  = DB::table('admissions')->where('id', $student_id)->first();
+        $class_name = data_get($admission, 'admitted_into_class', '');
 
         DB::table('parent_accounts')->where('login_id', $login_id)->update([
             'last_login' => 'Today ' . now()->format('g:i:s A'),
@@ -274,17 +479,19 @@ Route::get('/parent-dashboard/{login_id}', function ($login_id) {
 
         if ($admission && is_object($admission)) {
             $student_photo = isset($admission->student_photo) && $admission->student_photo
-                ? (str_starts_with($admission->student_photo, 'data:') ? $admission->student_photo : url($admission->student_photo))
+                ? (str_starts_with($admission->student_photo, 'http') || str_starts_with($admission->student_photo, 'data:') ? $admission->student_photo : request()->getSchemeAndHttpHost() . '/api/storage-proxy' . str_replace('/storage', '', $admission->student_photo))
                 : null;
-            $parent_photo = isset($admission->parent_photo) && $admission->parent_photo
-                ? (str_starts_with($admission->parent_photo, 'data:') ? $admission->parent_photo : url($admission->parent_photo))
+            $parentImage = $parent->relation === 'Mother' ? ($admission->mother_photo ?? null) : ($admission->father_photo ?? null);
+            $parent_photo = $parentImage
+                ? (str_starts_with($parentImage, 'http') || str_starts_with($parentImage, 'data:') ? $parentImage : request()->getSchemeAndHttpHost() . '/api/storage-proxy' . str_replace('/storage', '', $parentImage))
                 : null;
 
             $student_profile = [
                 'name'         => $admission->student_name ?? 'Student',
-                'admission_no' => $admission->admission_no ?? 'N/A',
+                'admission_no' => $admission->admission_no ?? ('ADM-' . $admission->id),
                 'class'        => $admission->admitted_into_class ?? 'N/A',
                 'section'      => $admission->section ?? 'A',
+                'roll_no'      => $admission->roll_no ?? 'N/A',
                 'father_name'  => $admission->father_name ?? 'N/A',
                 'dob'          => $admission->date_of_birth ?? 'N/A',
                 'phone'        => $admission->contact_no ?? 'N/A',
@@ -295,9 +502,40 @@ Route::get('/parent-dashboard/{login_id}', function ($login_id) {
             ];
         }
 
+        // Parent Profile Addition Check
+        if ($parent_photo) {
+            $parent->parent_photo = $parent_photo;
+        }
+
         // Timetable & Notices
         $timetable = [];
-        try { $timetable = DB::table('timetables')->where('class_name', $class_name)->get(); } catch (\Exception $e) {}
+        try { 
+            if (Schema::hasTable('timetables')) {
+                // Determine current day for filtering (optional, or just send all)
+                // For simplicity, let's filter by today or show entire week. 
+                // User said 'not showing', let's use case-insensitive class matching first.
+                $timetable = DB::table('timetables')
+                    ->where('class_name', $class_name)
+                    ->orderBy('start_time', 'asc')
+                    ->get()
+                    ->map(function($t) {
+                        return [
+                            'id'           => $t->id,
+                            'day'          => $t->day,
+                            'period'       => $t->period,
+                            'subject'      => $t->subject_name ?: 'Subject',
+                            'subjectName'  => $t->subject_name ?: 'Subject', // for backward compatibility in mobile app
+                            'teacher'      => $t->teacher_name ?: 'Teacher',
+                            'teacherName'  => $t->teacher_name ?: 'Teacher', // for backward compatibility in mobile app
+                            'start_time'   => $t->start_time ? date('h:i A', strtotime($t->start_time)) : '00:00',
+                            'end_time'     => $t->end_time ? date('h:i A', strtotime($t->end_time)) : '00:00',
+                            'roomNo'       => $t->room ?? 'N/A',
+                        ];
+                    })->toArray();
+            }
+        } catch (\Exception $e) {
+            Log::error('Dashboard Timetable Error: ' . $e->getMessage());
+        }
 
         $notices = [];
         try {
@@ -332,10 +570,10 @@ Route::get('/parent-dashboard/{login_id}', function ($login_id) {
         // Academic Calendar
         $academic_calendar = [];
         try {
-            if (Schema::hasTable('academic_calendar')) {
-                $academic_calendar = DB::table('academic_calendar')
-                    ->where('event_date', '>=', now()->startOfYear())
-                    ->orderBy('event_date', 'asc')
+            if (Schema::hasTable('academic_events')) {
+                $academic_calendar = DB::table('academic_events')
+                    ->where('date', '>=', now()->startOfYear())
+                    ->orderBy('date', 'asc')
                     ->get();
             }
         } catch (\Exception $e) {}
@@ -344,28 +582,50 @@ Route::get('/parent-dashboard/{login_id}', function ($login_id) {
         $total_due        = 0;
         $last_paid_amount = 0;
 
-        // Fees / Transactions — only filter by student_id (no user_id column in transactions)
-        if ($student_id) {
+        // Fees / Transactions 
+        if ($admission) {
             try {
+                // Link transactions to this student using ID, Admission No, or (Name + Class)
                 $transactions = DB::table('transactions')
-                    ->where('student_id', $student_id)
+                    ->where('type', 'Income')
+                    ->where(function($q) use ($admission) {
+                        $q->where('student_id', (string)$admission->id);
+                        if (!empty($admission->admission_no)) {
+                            $q->orWhere('student_id', $admission->admission_no);
+                        }
+                        // Optimized: standard where is usually case-insensitive in MySQL
+                        if (!empty($admission->student_name) && !empty($admission->admitted_into_class)) {
+                            $q->orWhere(function($sub) use ($admission) {
+                                $sub->where('student_name', $admission->student_name)
+                                   ->where('class_name', $admission->admitted_into_class);
+                            });
+                        }
+                    })
                     ->orderBy('date', 'desc')
                     ->get();
+
                 foreach ($transactions as $txn) {
                     $invoices[] = [
                         'id'     => $txn->transaction_id ?? $txn->id,
                         'term'   => $txn->category ?? 'School Fee',
-                        'amount' => $txn->amount,
+                        'amount' => number_format((float)$txn->amount, 2),
                         'status' => $txn->status ?? 'Paid',
                         'date'   => !empty($txn->date)
                             ? date('M j, Y', strtotime($txn->date))
                             : date('M j, Y', strtotime($txn->created_at)),
                     ];
-                    if (in_array($txn->status, ['Paid', 'Received']) && $last_paid_amount == 0) {
+                    // Track last paid
+                    if (($txn->status === 'Paid' || $txn->status === 'Completed' || $txn->status === 'PAID') && $last_paid_amount == 0) {
                         $last_paid_amount = $txn->amount;
                     }
                 }
-            } catch (\Exception $e) {}
+                
+                // Logic for total due - this depends on your school's logic. 
+                // For now, if you have a total_fee column in admissions, we could subtract paid sum.
+                // Assuming it's calculated elsewhere or just fixed.
+            } catch (\Exception $e) {
+                Log::error('Dashboard Fee Error: ' . $e->getMessage());
+            }
         }
 
         $fees = [
@@ -376,20 +636,35 @@ Route::get('/parent-dashboard/{login_id}', function ($login_id) {
         ];
 
         // Exams
-        $db_exams = collect();
         $exams    = [];
         try {
-            $db_exams = DB::table('exams')->get();
+            $db_exams = DB::table('exams')
+                ->where('class', $class_name)
+                ->orWhere('class', 'All')
+                ->orWhereNull('class')
+                ->orWhere('class', '')
+                ->get();
+                
             foreach ($db_exams as $ex) {
+                $raw_start = $ex->exam_date ?? $ex->start_date ?? null;
+                $start_val = $raw_start ? date('M j, Y', strtotime($raw_start)) : '--';
+                $end_val   = $ex->end_date ? date('M j, Y', strtotime($ex->end_date)) : '--';
+                
+                $term_str  = !empty($ex->term) ? " ({$ex->term})" : "";
+                $base_name = !empty($ex->exam_name) ? $ex->exam_name : (!empty($ex->name) ? $ex->name : 'Exam');
+
                 $exams[] = [
-                    'exam_id'    => $ex->id,
-                    'exam_name'  => $ex->name . ' (' . $ex->term . ')',
-                    'name'       => $ex->name,
-                    'term'       => $ex->term,
-                    'start_date' => $ex->start_date ? date('M j, Y', strtotime($ex->start_date)) : '--',
-                    'end_date'   => $ex->end_date   ? date('M j, Y', strtotime($ex->end_date))   : '--',
-                    'type'       => 'Written',
-                    'status'     => $ex->status,
+                    'exam_id'     => $ex->id,
+                    'exam_name'   => trim($base_name . $term_str),
+                    'name'        => $base_name,
+                    'term'        => $ex->term ?? '',
+                    'subject'     => $ex->subject ?? 'All Subjects',
+                    'start_date'  => $start_val,
+                    'end_date'    => $end_val,
+                    'type'        => $ex->exam_type ?? ($ex->type ?? 'Written'),
+                    'duration'    => $ex->duration ?? 'N/A',
+                    'total_marks' => $ex->total_marks ?? 'N/A',
+                    'status'      => $ex->status ?? 'Upcoming',
                 ];
             }
         } catch (\Exception $e) {}
@@ -420,19 +695,22 @@ Route::get('/parent-dashboard/{login_id}', function ($login_id) {
                     $obtained  = $rs->marks_obtained ?? 0;
                     $pct       = $maxMarks > 0 ? round(($obtained / $maxMarks) * 100, 1) : 0;
                     $examObj   = $db_exams->firstWhere('id', $rs->exam_id);
-                    // Grade based on percentage
+                    // Grade based on percentage if not manually set
                     $grade = $rs->grade ?? 'N/A';
-                    if ($pct >= 90) $grade = 'A+';
-                    elseif ($pct >= 80) $grade = 'A';
-                    elseif ($pct >= 70) $grade = 'B+';
-                    elseif ($pct >= 60) $grade = 'B';
-                    elseif ($pct >= 50) $grade = 'C';
-                    elseif ($pct >= 33) $grade = 'D';
-                    elseif ($pct > 0)   $grade = 'F';
+                    if (empty($rs->grade) || $rs->grade == 'N/A') {
+                        if ($pct >= 90) $grade = 'A+';
+                        elseif ($pct >= 80) $grade = 'A';
+                        elseif ($pct >= 70) $grade = 'B+';
+                        elseif ($pct >= 60) $grade = 'B';
+                        elseif ($pct >= 50) $grade = 'C';
+                        elseif ($pct >= 33) $grade = 'D';
+                        elseif ($pct > 0)   $grade = 'F';
+                    }
 
                     $results[] = [
                         'exam_name'       => $examObj ? $examObj->name : ($rs->exam_name ?? 'Exam'),
                         'term'            => $examObj ? ($examObj->term ?? '') : '',
+                        'subject'         => $rs->subject ?? ($examObj ? ($examObj->subject ?? 'N/A') : 'N/A'),
                         'percentage'      => $pct . '%',
                         'percentage_raw'  => $pct,
                         'grade'           => $grade,
@@ -440,8 +718,10 @@ Route::get('/parent-dashboard/{login_id}', function ($login_id) {
                         'max_marks'       => $maxMarks,
                         'remarks'         => $rs->remarks ?? '',
                         'student_name'    => $rs->student_name ?? ($admission->student_name ?? ''),
+                        'father_name'     => $admission ? ($admission->father_name ?? 'N/A') : 'N/A',
                         'class_name'      => $class_name,
                         'result_date'     => $rs->updated_at ? date('d M Y', strtotime($rs->updated_at)) : date('d M Y'),
+                        'status'          => $rs->status ?? 'PASS',
                     ];
                 }
             } catch (\Exception $e) {}
@@ -452,13 +732,17 @@ Route::get('/parent-dashboard/{login_id}', function ($login_id) {
         try {
             if (Schema::hasTable('homework')) {
                 $studentName = $admission ? ($admission->student_name ?? '') : '';
-                $query = DB::table('homework')->where('class_name', $class_name);
+                // Case-insensitive class name match (handles 'Class 1' vs 'CLASS 1' etc.)
+                $query = DB::table('homework')
+                    ->whereRaw('LOWER(class_name) = ?', [strtolower($class_name)]);
                 
                 // Only filter by student name if the column exists
                 if (Schema::hasColumn('homework', 'student_name')) {
                     $query->where(function ($q) use ($studentName) {
                         $q->where('student_name', 'All Students')
-                          ->orWhere('student_name', $studentName);
+                          ->orWhere('student_name', $studentName)
+                          ->orWhereNull('student_name')
+                          ->orWhere('student_name', '');
                     });
                 }
                 
@@ -466,28 +750,144 @@ Route::get('/parent-dashboard/{login_id}', function ($login_id) {
                     ->get()
                     ->map(function ($hw) {
                         try {
-                            $dueDate = $hw->due_date ? Carbon::parse($hw->due_date) : now()->addDays(7);
-                            $status  = $dueDate->startOfDay()->gte(now()->startOfDay()) ? 'Pending' : 'Completed';
+                            $dueDate = $hw->due_date ? Carbon::parse($hw->due_date) : null;
+                            
+                            // Use actual database status if available, fallback to date logic
+                            if (!empty($hw->status)) {
+                                // Capitalize first letter only (e.g. SUBMITTED -> Submitted)
+                                $status = ucfirst(strtolower($hw->status));
+                            } else {
+                                $status = $dueDate && $dueDate->startOfDay()->gte(now()->startOfDay()) ? 'Pending' : 'Completed';
+                            }
+
+                            // Avoid duplicating text: show description if it differs from title, otherwise just title
+                            $title = trim($hw->title ?? '');
+                            $desc  = trim($hw->description ?? '');
+                            $task  = $desc ?: $title;  // prefer description; fall back to title
+                            if ($title && $desc && strtolower($title) !== strtolower($desc)) {
+                                $task = $title . ' — ' . $desc;
+                            }
                             return [
-                                'subject'   => $hw->subject,
-                                'task'      => ($hw->title ?? '') . ($hw->description ? ' - ' . $hw->description : ''),
-                                'due_date'  => $dueDate->format('M d, Y'),
-                                'sort_date' => $hw->due_date,
-                                'status'    => $status,
+                                'subject'       => $hw->subject,
+                                'task'          => $task,
+                                'due_date'      => $dueDate ? $dueDate->format('M d, Y') : 'N/A',
+                                'assigned_date' => $hw->created_at ? Carbon::parse($hw->created_at)->format('M d, Y') : 'N/A',
+                                'sort_date'     => $hw->due_date,
+                                'status'        => $status,
+                                'teacher'       => $hw->teacher_name ?? ($hw->assigned_by ?? 'N/A'),
                             ];
                         } catch (\Exception $e) {
                             return [
-                                'subject'   => $hw->subject ?? 'N/A',
-                                'task'      => ($hw->title ?? 'N/A'),
-                                'due_date'  => 'N/A',
-                                'sort_date' => null,
-                                'status'    => 'Pending',
+                                'subject'       => $hw->subject ?? 'N/A',
+                                'task'          => trim($hw->description ?? ($hw->title ?? 'N/A')),
+                                'due_date'      => 'N/A',
+                                'assigned_date' => 'N/A',
+                                'sort_date'     => null,
+                                'status'        => !empty($hw->status) ? ucfirst(strtolower($hw->status)) : 'Pending',
+                                'teacher'       => $hw->teacher_name ?? ($hw->assigned_by ?? 'N/A'),
                             ];
                         }
                     })->values()->toArray();
             }
         } catch (\Exception $e) {
             \Illuminate\Support\Facades\Log::error("Dashboard Homework Error: " . $e->getMessage());
+        }
+
+        // All Parent Events (Holidays, Celebrations, etc.)
+        $parent_events = [];
+        try {
+            if (Schema::hasTable('parent_events')) {
+                $parent_events = DB::table('parent_events')
+                    ->where(function($q) use ($class_name) {
+                        $q->whereNull('target_class')
+                          ->orWhere('target_class', '')
+                          ->orWhere('target_class', 'All Classes')
+                          ->orWhere('target_class', $class_name);
+                    })
+                    ->orderBy('date', 'asc')
+                    ->get();
+            }
+        } catch (\Exception $e) {}
+
+        // Library and Transport Tracking
+        $library = [];
+        $bus_tracking = null;
+
+        if (is_object($admission)) {
+            // Bus Tracking Logic
+            try {
+                $routeId = data_get($admission, 'transport_route_id');
+                if ($routeId) {
+                    $route = DB::table('transport_routes')
+                        ->where('route_id', $routeId)
+                        ->orWhere('id', $routeId)
+                        ->first();
+
+                    if ($route && is_object($route)) {
+                        $vehicleId = data_get($route, 'assigned_vehicle_id');
+                        if ($vehicleId) {
+                            $vehicle = DB::table('transport_vehicles')->where('id', $vehicleId)->first();
+                            if ($vehicle && is_object($vehicle) && data_get($vehicle, 'is_tracking')) {
+                                $bus_tracking = [
+                                    'route_name'    => data_get($route, 'name'),
+                                    'vehicle_no'    => data_get($vehicle, 'reg_no'),
+                                    'lat'           => data_get($vehicle, 'current_lat'),
+                                    'lng'           => data_get($vehicle, 'current_lng'),
+                                    'status'        => data_get($vehicle, 'status', 'ACTIVE'),
+                                    'last_update'   => data_get($vehicle, 'last_location_update') ? Carbon::parse(data_get($vehicle, 'last_location_update'))->diffForHumans() : 'N/A'
+                                ];
+                            }
+                        }
+                    }
+                }
+            } catch (\Exception $eBus) { Log::error("Parent App Bus Tracking Error: " . $eBus->getMessage()); }
+
+            try {
+                if (Schema::hasTable('library_issuances')) {
+                    $library = DB::table('library_issuances')
+                        ->leftJoin('library_books', 'library_issuances.book_id', '=', 'library_books.book_id')
+                        ->where(function ($q) use ($admission) {
+                            $q->where('library_issuances.issued_to_id', (string)$admission->id);
+                            if (!empty($admission->admission_no)) {
+                                $q->orWhere('library_issuances.issued_to_id', $admission->admission_no);
+                            }
+                            if (!empty($admission->student_name)) {
+                                $q->orWhereRaw('LOWER(library_issuances.issued_to_name) = ?', [strtolower($admission->student_name)]);
+                            }
+                        })
+                        ->select(
+                            'library_issuances.issue_id',
+                            'library_issuances.book_id as original_book_id',
+                            'library_books.title as book_title',
+                            'library_books.author',
+                            'library_issuances.issue_date',
+                            'library_issuances.due_date',
+                            'library_issuances.return_date',
+                            'library_issuances.status'
+                        )
+                        ->orderBy('library_issuances.issue_date', 'desc')
+                        ->get()
+                        ->map(function ($row) {
+                            $status = $row->status;
+                            if ($status !== 'Returned') {
+                                if (\Carbon\Carbon::parse($row->due_date)->isPast() && !\Carbon\Carbon::parse($row->due_date)->isToday()) {
+                                    $status = 'Overdue';
+                                }
+                            }
+                            return [
+                                'issue_id' => $row->issue_id,
+                                'book_id' => $row->original_book_id,
+                                'book_title' => $row->book_title ?? 'Unknown Book',
+                                'author' => $row->author ?? 'Unknown Author',
+                                'issue_date' => $row->issue_date ? date('M d, Y', strtotime($row->issue_date)) : '',
+                                'due_date' => $row->due_date ? date('M d, Y', strtotime($row->due_date)) : '',
+                                'return_date' => $row->return_date ? date('M d, Y', strtotime($row->return_date)) : '',
+                                'status' => $status
+                            ];
+                        })
+                        ->toArray();
+                }
+            } catch (\Exception $e) {}
         }
 
 
@@ -510,7 +910,11 @@ Route::get('/parent-dashboard/{login_id}', function ($login_id) {
             'syllabus'    => $syllabus,
             'results'     => $results,
             'homework'    => $homework,
-            'calendar'    => $academic_calendar,
+            'parentEvents' => $parent_events,
+            'library'      => $library,
+            'bus_tracking' => $bus_tracking,
+            'calendar'     => $academic_calendar,
+            'parent_events'=> $parent_events, // keep for compatibility if needed
             'leaves'      => [],
             'support'     => [],
         ]);
@@ -742,7 +1146,7 @@ Route::get('/student-documents/{id}', function ($id) {
 Route::get('/students-for-dropdown', function (Request $request) {
     try {
         $query = DB::table('admissions')
-            ->select('id', 'student_name', 'admitted_into_class', 'status')
+            ->select('id', 'student_name', 'father_name', 'admitted_into_class', 'status')
             ->where('status', 'Approved')
             ->orderBy('student_name');
 
@@ -888,6 +1292,55 @@ Route::post('/student-attendance/bulk', function (Request $request) {
 });
 
 
+// ═══════════════════════════════════════
+// TRANSPORT TRACKING & PARENT MOBILE
+// ═══════════════════════════════════════
+Route::get('/student-bus-tracking/{admission_no}', [\App\Http\Controllers\TransportController::class, 'getStudentBusTracking']);
+Route::post('/vehicle-location-update/{vehicle_id}', [\App\Http\Controllers\TransportController::class, 'updateLocation']);
+Route::get('/parent-students/{login_id}', function($loginId) {
+    return response()->json(\App\Models\Admission::where('contact_no', $loginId)->get()->map(function($s) { return array_merge($s->toArray(), ['name' => $s->student_name, 'admission_number' => $s->admission_no]); })); 
+});
+
+
+
+Route::get('/parent-notifications/{login_id}', function($loginId) {
+    // Combined global notices (recipient is NULL) and direct messages for this parent
+    return response()->json(\App\Models\ParentNotification::whereNull('recipient_login_id')
+        ->orWhere('recipient_login_id', $loginId)
+        ->orderBy('created_at', 'desc')
+        ->get());
+});
+
+
+Route::delete('/parent-notifications/notice/{noticeId}', function($noticeId) {
+    // Delete notices that were broadcasted by sync
+    \App\Models\ParentNotification::where('type', 'NOTICE')->where('notice_id', $noticeId)->delete();
+    return response()->json(['success' => true]);
+});
+
+Route::put('/parent-notifications/sync-notice/{noticeId}', function(Request $request, $noticeId) {
+    \App\Models\ParentNotification::where('type', 'NOTICE')->where('notice_id', $noticeId)->update([
+        'title' => $request->title,
+        'message' => $request->message,
+    ]);
+    return response()->json(['success' => true]);
+});
+
+Route::get('/parent-contact-list', function() {
+    return response()->json(\App\Models\Admission::where('status', 'Approved')->select('id', 'student_name', 'father_name', 'contact_no', 'admitted_into_class as class', 'section', 'roll_no')->get());
+});
+
+Route::get('/messages', function() {
+    return response()->json(\App\Models\ParentNotification::where('type', 'MESSAGE')->orderBy('created_at', 'desc')->get());
+});
+
+Route::get('/classes-list', function() {
+    return response()->json(\App\Models\AcademicClass::pluck('name'));
+});
+
+Route::get('/sections-list', function() {
+    return response()->json(\App\Models\Section::pluck('name'));
+});
 
 
 
@@ -903,4 +1356,3 @@ Route::get('/{resource}/{id}', [GenericApiController::class, 'show']);
     Route::post('/{resource}', [GenericApiController::class, 'store']);
     Route::put('/{resource}/{id}', [GenericApiController::class, 'update']);
     Route::delete('/{resource}/{id}', [GenericApiController::class, 'destroy']);
-// });

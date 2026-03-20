@@ -12,5 +12,5 @@ class Homework extends Model
     // Table is 'homework' (singular) — Laravel would auto-pluralize to 'homeworks' without this
     protected $table = 'homework';
 
-    protected $fillable = ['class_name', 'student_name', 'subject', 'title', 'description', 'due_date'];
+    protected $fillable = ['class_name', 'section', 'student_name', 'subject', 'title', 'description', 'due_date', 'status', 'assigned_by', 'teacher_name'];
 }

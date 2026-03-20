@@ -4,6 +4,7 @@ import {
   Clock, AlertCircle, Search, Plus, Edit, Trash2, Eye, X, Save, BarChart2, RefreshCw
 } from 'lucide-react';
 import api from '../api/axios';
+import logoImg from '../assets/logo.jpeg';
 
 /* ══════════════════════════════════════════
    DATA
@@ -372,7 +373,7 @@ const AddResultModal = ({ isOpen, onClose, onSave, exams, students, classes, sub
   );
 };
 
-/* — View Result Modal — */
+/* — Premium Futuristic View Result Modal — */
 const ViewResultModal = ({ isOpen, onClose, data }) => {
   useEffect(() => {
     document.body.style.overflow = isOpen ? 'hidden' : 'unset';
@@ -380,73 +381,118 @@ const ViewResultModal = ({ isOpen, onClose, data }) => {
   }, [isOpen]);
   if (!isOpen || !data) return null;
 
-  const bar = data.percentage || 0;
-  const isPass = data.status === 'PASS';
+  const pct = data.percentage || 0;
+  const isPass = !['F', 'FAIL', 'E'].includes(data.grade?.toUpperCase());
+  const statusColorUrl = isPass ? 'from-[#00D2A6] to-[#00C6FF]' : 'from-[#F43F5E] to-[#FB923C]';
+  const textPassFailClass = isPass ? 'text-[#00D2A6]' : 'text-[#F43F5E]';
+  const glowShadow = isPass ? 'shadow-[0_0_15px_rgba(0,210,166,0.3)]' : 'shadow-[0_0_15px_rgba(244,63,94,0.3)]';
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose}></div>
-      <div className="relative w-full max-w-[460px] bg-white dark:bg-[#1e293b] rounded-lg shadow-2xl border border-gray-200 dark:border-[#334155] overflow-hidden">
-        {/* Colorful top banner */}
-        <div className={`w-full h-2 ${isPass ? 'bg-gradient-to-r from-[#10b981] to-[#06b6d4]' : 'bg-gradient-to-r from-[#f43f5e] to-[#f59e0b]'}`}></div>
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-md" onClick={onClose}></div>
+      
+      {/* Premium Dark Modal Container */}
+      <div className="relative w-full max-w-[500px] bg-[#1A2133] rounded-[14px] shadow-2xl border border-[#2A334B] flex flex-col overflow-hidden font-sans">
+        
+        {/* Neon Top Accent Line */}
+        <div className={`w-full h-1.5 bg-gradient-to-r ${statusColorUrl}`}></div>
 
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-[#334155] bg-gray-50 dark:bg-[#1a2234]">
-          <div className="flex items-center space-x-3 text-[#10b981]">
-            <div className="bg-[#10b981]/15 p-1.5 rounded"><BarChart2 size={16} strokeWidth={2.5} /></div>
-            <h3 className="text-[13px] font-black uppercase tracking-widest text-[var(--text-primary)]">Result Card</h3>
+        {/* Modal Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#2A334B] bg-[#1A2133] shrink-0">
+          <div className="flex items-center space-x-3">
+             <div className="bg-[#00D2A6]/10 p-1.5 rounded text-[#00D2A6]">
+                <BarChart2 size={18} strokeWidth={2.5} />
+             </div>
+             <h3 className="text-[14px] font-[900] uppercase tracking-[0.15em] text-white">Result Card</h3>
           </div>
-          <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded bg-gray-200 dark:bg-[#0f172a] border dark:border-[#334155] text-[#64748b]"><X size={14} strokeWidth={3} /></button>
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded bg-[#1E2538] border border-[#2A334B] text-[#94A3B8] hover:text-white transition-colors">
+             <X size={15} strokeWidth={3} />
+          </button>
         </div>
 
-        <div className="p-6 bg-white dark:bg-[#1a2234]">
+        {/* Card Body */}
+        <div className="p-6 bg-[#1A2133] flex flex-col">
+          
+          {/* School Header — Logo + School Name + Subtitle */}
+          <div className="flex items-center space-x-4 mb-6 border-b border-[#2A334B] pb-4">
+             <div className="w-[52px] h-[52px] bg-white rounded-[10px] p-0.5 border-2 border-[#EAB308] flex-shrink-0 flex items-center justify-center">
+                 <img src={logoImg} alt="School Logo" className="w-[90%] h-[90%] object-contain" />
+             </div>
+             <div>
+                <h4 className="text-white text-[15px] font-[900] tracking-wide uppercase">Little Seeds School</h4>
+                <p className="text-[#94A3B8] text-[10px] font-[600] tracking-wide mt-0.5">An English Medium School</p>
+             </div>
+          </div>
+
           {/* Student Banner */}
-          <div className="flex items-center justify-between mb-5">
-            <div>
-              <p className="text-[10px] font-bold text-[#64748b] uppercase tracking-widest mb-0.5">Student</p>
-              <p className="text-[18px] font-black text-[var(--text-primary)]">{data.studentName}</p>
-              <p className="text-[11px] font-bold text-[var(--text-secondary)]">{data.class} — {data.subject}</p>
+          <div className="flex items-start justify-between mb-5">
+            <div className="flex flex-col flex-1">
+              <span className="text-[10px] font-[800] text-[#64748B] uppercase tracking-[0.2em] mb-1">Student</span>
+              <h2 className="text-[22px] font-[900] text-white leading-none tracking-tight mb-1.5">{data.studentName}</h2>
+              <p className="text-[11px] font-[600] text-[#94A3B8] tracking-widest">{data.class}</p>
+              {/* Subject row */}
+              <div className="flex items-center space-x-2 mt-2">
+                <span className="text-[9px] font-[800] text-[#64748B] uppercase tracking-widest">Subject:</span>
+                <span className="text-[11px] font-[800] text-[#E2E8F0]">{data.subject || 'N/A'}</span>
+              </div>
+              {/* Father's name row */}
+              <div className="flex items-center space-x-2 mt-1">
+                <span className="text-[9px] font-[800] text-[#64748B] uppercase tracking-widest">Father:</span>
+                <span className="text-[11px] font-[800] text-[#E2E8F0]">{data.fatherName || 'N/A'}</span>
+              </div>
             </div>
-            <div className={`w-14 h-14 rounded-xl flex items-center justify-center text-[20px] font-black border-2 ${gradeBadge[data.grade] || gradeBadge['A']}`}>
-              {data.grade}
+            
+            {/* Glowing Grade Box */}
+            <div className={`w-[60px] h-[60px] rounded-[16px] flex items-center justify-center text-[28px] font-[900] border-[2px] bg-[#2563EB]/10 border-[#3B82F6] text-[#60A5FA] shadow-[0_0_20px_rgba(59,130,246,0.3)]`}>
+              {data.grade || '-'}
             </div>
           </div>
 
-          {/* Progress bar */}
-          <div className="my-5">
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[10px] font-bold text-[#64748b] uppercase tracking-widest">Score</span>
-              <span className={`text-[13px] font-black ${isPass ? 'text-[#10b981]' : 'text-[#f43f5e]'}`}>{bar}%</span>
+          {/* Modern Progress Bar */}
+          <div className="mb-6">
+            <div className="flex flex-col mb-2 space-y-1">
+              <div className="flex items-end justify-between">
+                 <span className="text-[10px] font-[800] text-[#64748B] uppercase tracking-[0.2em]">Score</span>
+                 <span className={`text-[15px] font-[900] ${textPassFailClass}`}>{pct}%</span>
+              </div>
             </div>
-            <div className="w-full bg-gray-200 dark:bg-gray-700 h-3 rounded-full overflow-hidden">
-              <div className={`h-full rounded-full transition-all ${isPass ? 'bg-gradient-to-r from-[#10b981] to-[#06b6d4]' : 'bg-gradient-to-r from-[#f43f5e] to-[#f59e0b]'}`}
-                style={{ width: `${bar}%` }}></div>
+            <div className="w-full bg-[#2A334B] h-2.5 rounded-full overflow-hidden shadow-inner">
+              <div className={`h-full rounded-full transition-all duration-700 bg-gradient-to-r ${statusColorUrl} ${glowShadow}`}
+                style={{ width: `${pct}%` }}></div>
             </div>
           </div>
 
           {/* Stats Grid */}
           <div className="grid grid-cols-3 gap-3">
-            {[
-              { label: 'Marks Obtained', val: data.marksObtained },
-              { label: 'Total Marks', val: data.totalMarks },
-              { label: 'Result', val: data.status, color: isPass ? 'text-[#10b981]' : 'text-[#f43f5e]' },
-            ].map((s, i) => (
-              <div key={i} className="bg-gray-50 dark:bg-[#10162A] border border-gray-200 dark:border-[#334155] rounded-lg p-3 text-center">
-                <p className="text-[9px] font-bold text-[#64748b] uppercase tracking-widest mb-1">{s.label}</p>
-                <p className={`text-[15px] font-black ${s.color || 'text-[var(--text-primary)]'}`}>{s.val}</p>
-              </div>
-            ))}
+             <div className="bg-[#1E273A] border border-[#2A334B] rounded-[12px] p-4 flex flex-col items-center justify-center">
+                <span className="text-[8.5px] font-[800] text-[#64748B] uppercase tracking-widest mb-1.5 text-center">Marks Obtained</span>
+                <span className="text-[20px] font-[900] text-white leading-none">{data.marksObtained || '-'}</span>
+             </div>
+             <div className="bg-[#1E273A] border border-[#2A334B] rounded-[12px] p-4 flex flex-col items-center justify-center">
+                <span className="text-[8.5px] font-[800] text-[#64748B] uppercase tracking-widest mb-1.5 text-center">Total Marks</span>
+                <span className="text-[20px] font-[900] text-white leading-none">{data.totalMarks || '-'}</span>
+             </div>
+             <div className="bg-[#1E273A] border border-[#2A334B] rounded-[12px] p-4 flex flex-col items-center justify-center">
+                <span className="text-[8.5px] font-[800] text-[#64748B] uppercase tracking-widest mb-1.5 text-center">Result</span>
+                <span className={`text-[16px] font-[900] tracking-widest leading-none ${textPassFailClass}`}>{isPass ? 'PASS' : 'FAIL'}</span>
+             </div>
           </div>
 
-          <p className="text-[10px] font-bold text-center text-[#64748b] mt-4 uppercase tracking-widest">Exam ID: {data.examId} &nbsp;·&nbsp; Result ID: {data.id}</p>
+          {/* Footer IDs */}
+          <div className="mt-6 flex items-center justify-center pt-5 border-t border-[#2A334B]">
+             <span className="text-[9px] font-[700] text-[#475569] uppercase tracking-[0.2em]">
+                Exam ID: {data.examId} &nbsp;&nbsp;•&nbsp;&nbsp; Result ID: {data.id}
+             </span>
+          </div>
+          
         </div>
 
-        <div className="px-6 pb-5 flex justify-end border-t border-gray-200 dark:border-[#334155] pt-4 bg-white dark:bg-[#1a2234]">
-          <button onClick={onClose} className="px-6 py-2.5 bg-gray-100 dark:bg-[#0f172a] border border-gray-200 dark:border-[#334155] text-[var(--text-primary)] rounded text-[10px] font-extrabold tracking-widest uppercase">Close</button>
-        </div>
       </div>
     </div>
   );
 };
+
+
 
 /* ══════════════════════════════════════════
    MAIN PAGE
@@ -509,6 +555,7 @@ const ExamsResults = () => {
           rawId: r.id,
           examId: r.exam_id ?? 'N/A',
           studentName: r.student_name ?? 'Student',
+          fatherName: r.father_name ?? 'N/A', // Read here
           class: r.class ?? 'N/A',
           subject: r.subject ?? 'N/A',
           marksObtained: r.marks_obtained ?? 0,
@@ -543,7 +590,6 @@ const ExamsResults = () => {
         start_date: data.date, // Also send to original column
         duration: data.duration,
         total_marks: data.totalMarks,
-        max_marks: data.totalMarks,
         exam_type: data.examType,
         term: data.name, // Also send to original column
         status: data.status.charAt(0).toUpperCase() + data.status.slice(1).toLowerCase() // Map UPCOMING -> Upcoming
@@ -590,6 +636,7 @@ const ExamsResults = () => {
         exam_name: data.examId,
         student_id: selectedStudent ? selectedStudent.id : null,
         student_name: data.studentName,
+        father_name: selectedStudent ? selectedStudent.father_name : 'N/A',
         class: data.class,
         subject: data.subject,
         marks_obtained: data.marksObtained,
@@ -613,17 +660,17 @@ const ExamsResults = () => {
   };
 
   const filteredExams = examsList.filter(e =>
-    e.name.toLowerCase().includes(search.toLowerCase()) ||
-    e.subject.toLowerCase().includes(search.toLowerCase()) ||
-    e.class.toLowerCase().includes(search.toLowerCase()) ||
-    e.id.toLowerCase().includes(search.toLowerCase())
+    String(e.name || '').toLowerCase().includes(search.toLowerCase()) ||
+    String(e.subject || '').toLowerCase().includes(search.toLowerCase()) ||
+    String(e.class || '').toLowerCase().includes(search.toLowerCase()) ||
+    String(e.id || '').toLowerCase().includes(search.toLowerCase())
   );
 
   const filteredResults = resultsList.filter(r =>
-    r.studentName.toLowerCase().includes(search.toLowerCase()) ||
-    r.subject.toLowerCase().includes(search.toLowerCase()) ||
-    r.class.toLowerCase().includes(search.toLowerCase()) ||
-    r.examId.toLowerCase().includes(search.toLowerCase())
+    String(r.studentName || '').toLowerCase().includes(search.toLowerCase()) ||
+    String(r.subject || '').toLowerCase().includes(search.toLowerCase()) ||
+    String(r.class || '').toLowerCase().includes(search.toLowerCase()) ||
+    String(r.examId || '').toLowerCase().includes(search.toLowerCase())
   );
 
   const totalExams    = examsList.length;

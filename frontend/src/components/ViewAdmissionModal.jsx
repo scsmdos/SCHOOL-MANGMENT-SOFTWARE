@@ -137,6 +137,9 @@ const ViewAdmissionModal = ({ isOpen, onClose, data, onStatusChange }) => {
                   <InfoBox label="Mother's Job" value={data?.occupation_mother} />
                   <InfoBox label="Primary Contact" value={data?.contactNo} />
                   <InfoBox label="Father's Qual" value={data?.qualification_father} />
+                  <div className="col-span-2">
+                    <InfoBox label="Parent's Email" value={data?.parent_email} className="bg-orange-50/50 dark:bg-orange-900/10 border-orange-100 dark:border-orange-900/30" />
+                  </div>
                </div>
             </div>
           </div>

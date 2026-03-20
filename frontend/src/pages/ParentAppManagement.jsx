@@ -26,7 +26,8 @@ import {
   ChevronRight,
   TrendingUp,
   Activity,
-  RefreshCw
+  RefreshCw,
+  Trash2
 } from 'lucide-react';
 import api from '../api/axios';
 
@@ -102,6 +103,17 @@ const ParentAppManagement = () => {
       fetchParents();
     } catch (err) {
       alert('Error updating status: ' + (err.response?.data?.message || err.message));
+    }
+  };
+
+  const handleDeleteParent = async (parent) => {
+    if (!window.confirm(`Are you sure you want to delete the account for ${parent.name}? This action cannot be undone.`)) return;
+    try {
+      await api.delete(`/parent-accounts/${parent.rawId}`);
+      alert('Account deleted successfully');
+      fetchParents();
+    } catch (err) {
+      alert('Error deleting account: ' + (err.response?.data?.message || err.message));
     }
   };
 
@@ -233,8 +245,8 @@ const ParentAppManagement = () => {
                          <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${parent.status === 'Active' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>{parent.status}</span>
                        </td>
                        <td className="px-6 py-2 text-right">
-                          <div className="flex items-center justify-end space-x-1 font-extrabold uppercase tracking-widest text-[9px]">
-                             <a href={`mailto:${parent.email || 'parent@school.com'}?subject=Your App Login Details&body=Hello ${parent.name},%0D%0A%0D%0AYour Parent App Login ID is: ${parent.loginId}%0D%0AYour PIN is: ${parent.pin}%0D%0A%0D%0APlease download the app and login!`} className="w-8 h-8 rounded bg-gray-100 dark:bg-white/5 flex items-center justify-center text-slate-500 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-500/10 transition-colors" title="Email Login Details"><Mail size={13} strokeWidth={2.5}/></a>
+                           <div className="flex items-center justify-end space-x-1 font-extrabold uppercase tracking-widest text-[9px]">
+                             <button onClick={() => handleDeleteParent(parent)} className="w-8 h-8 rounded bg-gray-100 dark:bg-white/5 flex items-center justify-center text-slate-500 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors" title="Delete Account"><Trash2 size={13} strokeWidth={2.5}/></button>
                              <button onClick={() => setSelectedParent(parent)} className="w-8 h-8 rounded bg-gray-100 dark:bg-white/5 flex items-center justify-center text-slate-500 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-500/10 transition-colors" title="Change PIN"><Key size={13} strokeWidth={2.5}/></button>
                              <button onClick={() => handleToggleStatus(parent)} className={`w-8 h-8 rounded bg-gray-100 dark:bg-white/5 flex items-center justify-center transition-colors ${parent.status === 'Active' ? 'text-slate-500 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10' : 'text-rose-500 bg-rose-50 dark:bg-rose-500/10 hover:text-emerald-500'}`} title={parent.status === 'Active' ? 'Block Account' : 'Unblock Account'}><Lock size={13} strokeWidth={2.5}/></button>
                           </div>

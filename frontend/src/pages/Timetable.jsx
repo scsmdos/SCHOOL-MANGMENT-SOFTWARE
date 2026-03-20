@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Grid, UserCheck, Clock, ShieldCheck, Plus, X, Save,
   Download, Settings, ChevronDown, Edit, Trash2, AlertTriangle, RefreshCw
@@ -290,6 +290,7 @@ const Timetable = () => {
   const [selectedSubject, setSelectedSubject] = useState('');
   const [slots, setSlots]                 = useState({});
   const [loading, setLoading]             = useState(true);
+  const [ready, setReady]                 = useState(false);
   const [modal, setModal]                 = useState({ open: false, key: null, context: '', periodId: null, day: null });
   const [showConfig, setShowConfig]       = useState(false);
   const [periods, setPeriods]             = useState(DEFAULT_PERIODS);
@@ -324,14 +325,15 @@ const Timetable = () => {
         }
       }
       if (tv.status === 'fulfilled') setTeachers(tv.value.data?.data ?? tv.value.data ?? []);
-    } catch (e) { console.error(e); }
+      setReady(true);
+    } catch (e) { console.error(e); setReady(true); }
   }, [selectedClass, selectedSubject]);
 
   useEffect(() => { fetchBaseData(); }, [fetchBaseData]);
 
 
   const fetchTimetable = useCallback(async () => {
-    if (activeTab === 'class' && !selectedClass) return;
+    if (!ready || (activeTab === 'class' && !selectedClass)) return;
     setLoading(true);
     try {
       const url = activeTab === 'class' 
@@ -421,25 +423,27 @@ const Timetable = () => {
 
   const existing = modal.key ? slots[modal.key] : null;
 
-  /* — Stats — */
-  const classesWithData = classes.filter(cls =>
-    periods.some(p => !p.isBreak && DAYS.some(d => slots[buildKey(cls, p.id, d)]))
-  ).length;
+  /* — Stats Memoized — */
+  const classesWithData = useMemo(() => classes.filter(cls =>
+    periods.some(p => !p.isBreak && DAYS.some(d => slots[buildKey(cls.name || cls.class_name || cls, p.id, d)]))
+  ).length, [classes, periods, slots]);
 
-  const teachersActive = new Set(Object.values(slots).map(s => s.teacher)).size;
+  const teachersActive = useMemo(() => new Set(Object.values(slots).map(s => s.teacher)).size, [slots]);
 
-  const totalPeriods = Object.keys(slots).filter(k => {
+  const totalPeriods = useMemo(() => Object.keys(slots).filter(k => {
     const [cls] = k.split('|');
     return cls === selectedClass;
-  }).length;
+  }).length, [slots, selectedClass]);
 
-
-  const conflicts = (() => {
+  const conflicts = useMemo(() => {
     let c = 0;
+    const classNames = classes.map(cls => cls.name || cls.class_name || (typeof cls === 'string' ? cls : ''));
+    if (classNames.length === 0) return 0;
+
     DAYS.forEach(day => {
       periods.filter(p => !p.isBreak).forEach(p => {
         const teacherUsed = {};
-        CLASSES.forEach(cls => {
+        classNames.forEach(cls => {
           const slot = slots[buildKey(cls, p.id, day)];
           if (slot) {
             if (teacherUsed[slot.teacher]) c++;
@@ -449,11 +453,11 @@ const Timetable = () => {
       });
     });
     return c;
-  })();
+  }, [classes, periods, slots]);
 
-  const statCards = [
-    { label: 'CLASSES SCHEDULED', value: `${classesWithData} / ${CLASSES.length}`, icon: Grid, iconColor: 'text-[#6366f1]', iconBg: 'bg-[#6366f1]/10 dark:bg-[#6366f1]/20' },
-    { label: 'ACTIVE TEACHERS',   value: `${teachersActive} / ${TEACHERS.length}`, icon: UserCheck, iconColor: 'text-[#06b6d4]', iconBg: 'bg-[#06b6d4]/10 dark:bg-[#06b6d4]/20' },
+  const statCards = useMemo(() => [
+    { label: 'CLASSES SCHEDULED', value: `${classesWithData} / ${classes.length || CLASSES.length}`, icon: Grid, iconColor: 'text-[#6366f1]', iconBg: 'bg-[#6366f1]/10 dark:bg-[#6366f1]/20' },
+    { label: 'ACTIVE TEACHERS',   value: `${teachersActive} / ${teachers.length || TEACHERS.length}`, icon: UserCheck, iconColor: 'text-[#06b6d4]', iconBg: 'bg-[#06b6d4]/10 dark:bg-[#06b6d4]/20' },
     { label: 'TOTAL PERIODS / WEEK', value: totalPeriods,                           icon: Clock, iconColor: 'text-[#a855f7]', iconBg: 'bg-[#a855f7]/10 dark:bg-[#a855f7]/20' },
     {
       label: 'CONFLICT STATUS',
@@ -462,7 +466,7 @@ const Timetable = () => {
       iconColor: conflicts === 0 ? 'text-[#10b981]' : 'text-[#f43f5e]',
       iconBg: conflicts === 0 ? 'bg-[#10b981]/10 dark:bg-[#10b981]/20' : 'bg-[#f43f5e]/10 dark:bg-[#f43f5e]/20',
     },
-  ];
+  ], [classesWithData, classes.length, teachersActive, teachers.length, totalPeriods, conflicts]);
 
   /* — Subject overview: show all classes for a subject across the grid — */
   const getSubjectSlot = (periodId, day) => {

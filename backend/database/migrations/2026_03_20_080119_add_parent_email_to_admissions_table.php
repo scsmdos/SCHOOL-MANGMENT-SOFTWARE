@@ -11,9 +11,11 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('admissions', function (Blueprint $table) {
-            $table->string('parent_email')->nullable()->after('contact_no');
-        });
+        if (!Schema::hasColumn('admissions', 'parent_email')) {
+            Schema::table('admissions', function (Blueprint $table) {
+                $table->string('parent_email')->nullable()->after('contact_no');
+            });
+        }
     }
 
     /**

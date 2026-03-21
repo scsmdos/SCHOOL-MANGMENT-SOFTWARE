@@ -19,8 +19,9 @@ const InfoBox = ({ label, value, className = "" }) => (
 const getPhotoSrc = (url, fallbackText) => {
   if (!url) return `https://placehold.co/150x200/1e293b/a2a9b5?text=${fallbackText}`;
   if (url.startsWith('http')) return url;
-  const baseUrl = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:8000';
-  return `${baseUrl}${url}`;
+  const baseUrl = import.meta.env.VITE_API_URL?.split('/api')[0] || 'http://localhost:8000';
+  const cleanUrl = url.startsWith('/') ? url : `/${url}`;
+  return `${baseUrl}${cleanUrl}`;
 };
 
 const ViewAdmissionModal = ({ isOpen, onClose, data, onStatusChange }) => {

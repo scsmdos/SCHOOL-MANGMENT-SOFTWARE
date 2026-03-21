@@ -6,6 +6,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams } from 'expo-router';
 import { useTheme } from '../../context/ThemeContext';
+import { CONFIG } from '../../constants/Config';
 
 export default function CommunicationScreen() {
   const { theme, isDark } = useTheme();
@@ -20,14 +21,20 @@ export default function CommunicationScreen() {
     if (initialTab) setActiveTab(initialTab as any);
   }, [initialTab]);
 
-  const BASE_URL = 'http://10.32.136.136:8000/api';
+
 
   const fetchNotifications = useCallback(async () => {
     try {
       const loginId = await AsyncStorage.getItem('parent_login_id');
+      const token = await AsyncStorage.getItem('parent_auth_token');
       if (!loginId) return;
 
-      const response = await fetch(`${BASE_URL}/parent-notifications/${loginId}`);
+      const response = await fetch(`${CONFIG.BASE_URL}/parent-notifications/${loginId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json'
+        }
+      });
       const data = await response.json();
       setNotifications(data);
     } catch (error) {

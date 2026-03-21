@@ -5,6 +5,7 @@ import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../../context/ThemeContext';
+import { CONFIG } from '../../constants/Config';
 import { WebView } from 'react-native-webview';
 
 export default function TrackScreen() {
@@ -15,11 +16,16 @@ export default function TrackScreen() {
   const [trackingData, setTrackingData] = useState<any>(null);
   const webViewRef = useRef<WebView>(null);
 
-  const BASE_URL = 'http://10.32.136.136:8000/api';
 
   const fetchTracking = useCallback(async (admissionNo: string) => {
     try {
-      const resp = await fetch(`${BASE_URL}/student-bus-tracking/${admissionNo}`);
+      const token = await AsyncStorage.getItem('parent_auth_token');
+      const resp = await fetch(`${CONFIG.BASE_URL}/student-bus-tracking/${admissionNo}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json'
+        }
+      });
       const data = await resp.json();
       if (data.success) {
         setTrackingData(data);
@@ -38,13 +44,19 @@ export default function TrackScreen() {
     setLoading(true);
     try {
       const loginId = await AsyncStorage.getItem('parent_login_id');
+      const token = await AsyncStorage.getItem('parent_auth_token');
       if (!loginId) {
         Alert.alert('Error', 'Session lost. Please login again.');
         router.replace('/login');
         return;
       }
       
-      const sResp = await fetch(`${BASE_URL}/parent-students/${loginId}`);
+      const sResp = await fetch(`${CONFIG.BASE_URL}/parent-students/${loginId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json'
+        }
+      });
       const sData = await sResp.json();
       
       if (sData && Array.isArray(sData) && sData.length > 0) {

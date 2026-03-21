@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity, ActivityIndicator, Alert, Image } from 'react-native';
+import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
@@ -13,25 +14,42 @@ export default function ProfileScreen() {
   const [parentData, setParentData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchProfile = async () => {
-      try {
-        const loginId = await AsyncStorage.getItem('parent_login_id');
-        if (loginId) {
-          const response = await fetch(`${CONFIG.BASE_URL}/parent-dashboard/${loginId}`);
-          const parsed = await response.json();
-          if (!parsed.error && parsed.parent) {
-             setParentData(parsed.parent);
-             setProfile(parsed.parent.student_profile || null);
+  useFocusEffect(
+    useCallback(() => {
+      const fetchProfile = async () => {
+        setLoading(true);
+        try {
+          const loginId = await AsyncStorage.getItem('parent_login_id');
+          const studentId = await AsyncStorage.getItem('selected_student_id');
+          if (loginId) {
+            const token = await AsyncStorage.getItem('parent_auth_token');
+            const response = await fetch(`${CONFIG.BASE_URL}/parent-dashboard/${loginId}${studentId ? `?student_id=${studentId}` : ''}`, {
+               headers: {
+                  'Authorization': `Bearer ${token}`,
+                  'Accept': 'application/json'
+               }
+            });
+
+            if (response.status === 401) {
+                await AsyncStorage.clear();
+                router.replace('/login');
+                return;
+            }
+
+            const parsed = await response.json();
+            if (!parsed.error && parsed.parent) {
+               setParentData(parsed.parent);
+               setProfile(parsed.parent.student_profile || null);
+            }
           }
+        } catch (err) {
+          console.log("Profile API Error", err);
         }
-      } catch (err) {
-        console.log("Profile API Error", err);
-      }
-      setLoading(false);
-    };
-    fetchProfile();
-  }, []);
+        setLoading(false);
+      };
+      fetchProfile();
+    }, [])
+  );
 
   const handleLogout = async () => {
     Alert.alert('Logout', 'Are you sure you want to log out?', [
@@ -153,8 +171,8 @@ const styles = StyleSheet.create({
   relationBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, marginRight: 10 },
   relationTxt: { fontSize: 10, fontWeight: '900', letterSpacing: 1 },
   loginId: { color: '#64748B', fontSize: 13, fontWeight: '700' },
-  sectionHeader: { marginBottom: 15 },
-  sectionTitle: { color: '#64748B', fontSize: 11, fontWeight: '900', letterSpacing: 1.5 },
+  sectionHeader: { marginBottom: 15, alignItems: 'center' },
+  sectionTitle: { color: '#64748B', fontSize: 11, fontWeight: '900', letterSpacing: 1.5, textAlign: 'center' },
   infoCard: { borderRadius: 24, padding: 10, borderWidth: 1, marginTop: 10 },
   infoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 15, paddingHorizontal: 15 },
   infoIconBox: { width: 32, height: 32, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginRight: 12 },

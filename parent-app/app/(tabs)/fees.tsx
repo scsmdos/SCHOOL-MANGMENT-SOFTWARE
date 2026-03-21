@@ -5,6 +5,7 @@ import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../../context/ThemeContext';
+import { CONFIG } from '../../constants/Config';
 
 const LOGO = require('../../assets/logo.png');
 
@@ -18,9 +19,15 @@ export default function FeesScreen() {
     const fetchFees = async () => {
       try {
         const loginId = await AsyncStorage.getItem('parent_login_id');
+        const token = await AsyncStorage.getItem('parent_auth_token');
         if (!loginId) { setLoading(false); return; }
 
-        const response = await fetch(`http://10.32.136.136:8000/api/parent-dashboard/${loginId}`);
+        const response = await fetch(`${CONFIG.BASE_URL}/parent-dashboard/${loginId}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Accept': 'application/json'
+          }
+        });
         const json = await response.json();
         setData(json);
       } catch (err) {

@@ -8,7 +8,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../context/ThemeContext';
 import { CONFIG } from '../constants/Config';
 
-const logoImg = require('../assets/logo.jpeg');
+const logoImg = require('../assets/logo.png');
 
 export default function LoginScreen() {
   const { theme, isDark } = useTheme();

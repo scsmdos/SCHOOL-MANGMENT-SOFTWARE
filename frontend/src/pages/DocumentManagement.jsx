@@ -63,7 +63,7 @@ const DocumentManagement = () => {
             expiry: d.expiry_date ?? '-',
             status: d.status ?? 'Pending',
             path: d.file_path 
-              ? (d.file_path.startsWith('http') ? d.file_path : `http://localhost:8000${d.file_path.startsWith('/') ? '' : '/'}${d.file_path}`)
+              ? (d.file_path.startsWith('http') ? d.file_path : `${import.meta.env.VITE_API_URL || 'http://localhost:8000/api'}/storage-proxy/${d.file_path.replace('/storage/', '')}`)
               : null
           }))
       }));

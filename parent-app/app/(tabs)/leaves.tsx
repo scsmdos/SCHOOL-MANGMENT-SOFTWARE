@@ -6,6 +6,7 @@ import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../../context/ThemeContext';
+import { CONFIG } from '../../constants/Config';
 
 const { width, height } = Dimensions.get('window');
 
@@ -83,14 +84,17 @@ export default function LeavesScreen() {
   const [showStartCal, setShowStartCal] = useState(false);
   const [showEndCal, setShowEndCal] = useState(false);
 
-  const BASE_URL = 'http://10.32.136.136:8000/api';
+
 
   const fetchData = async () => {
     setFetching(true);
     try {
       const loginId = await AsyncStorage.getItem('parent_login_id');
+      const token = await AsyncStorage.getItem('parent_auth_token');
       if (!loginId) return;
-      const resProfile = await fetch(`${BASE_URL}/parent-dashboard/${loginId}`);
+      const resProfile = await fetch(`${CONFIG.BASE_URL}/parent-dashboard/${loginId}`, {
+         headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' }
+      });
       const dataProfile = await resProfile.json();
       
       const prof = dataProfile.parent?.student_profile || dataProfile.student_profile || null;
@@ -98,7 +102,9 @@ export default function LeavesScreen() {
 
       if (prof) {
          const sid = prof.admission_no || prof.id;
-         const resHistory = await fetch(`${BASE_URL}/student-leaves?student_id=${sid}`);
+         const resHistory = await fetch(`${CONFIG.BASE_URL}/student-leaves?student_id=${sid}`, {
+            headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' }
+         });
          const dataHist = await resHistory.json();
          setHistory(dataHist.data || dataHist || []);
       }
@@ -125,8 +131,15 @@ export default function LeavesScreen() {
          status: 'Pending', 
          applied_by: 'Parent'
       };
-      const response = await fetch(`${BASE_URL}/student-leaves`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+      const token = await AsyncStorage.getItem('parent_auth_token');
+      const response = await fetch(`${CONFIG.BASE_URL}/student-leaves`, {
+        method: 'POST', 
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json'
+        }, 
+        body: JSON.stringify(payload)
       });
       if (response.ok) { 
         Alert.alert("Success", "Leave request submitted successfully!"); 

@@ -91,6 +91,7 @@ const Sidebar = () => {
             <SidebarItem icon={Bus} label="Transport" active={location.pathname === '/admin/transport'} onClick={() => navigate('/admin/transport')} />
             <SidebarItem icon={MessageSquare} label="Communication" active={location.pathname === '/admin/communication'} onClick={() => navigate('/admin/communication')} />
             <SidebarItem icon={Smartphone} label="Parent App" active={location.pathname === '/admin/parent-app'} onClick={() => navigate('/admin/parent-app')} />
+            <SidebarItem icon={Smartphone} label="Teacher App" active={location.pathname === '/admin/teacher-app'} onClick={() => navigate('/admin/teacher-app')} />
             <SidebarItem icon={Settings} label="Settings" />
           </div>
         </div>

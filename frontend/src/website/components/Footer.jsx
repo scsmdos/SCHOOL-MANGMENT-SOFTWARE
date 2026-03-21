@@ -105,9 +105,7 @@ export const Footer = () => {
             {/* Bottom Copyright Area */}
             <div className="max-w-7xl mx-auto mt-8 pt-6 border-t border-white/5 flex flex-col md:flex-row items-center justify-between text-[11px] font-black tracking-wider text-slate-500 uppercase">
                 <p>© 2026 LITTLE SEEDS SCHOOL. ALL RIGHTS RESERVED.</p>
-                <p className="flex items-center gap-1.5 mt-4 md:mt-0">
-                    MADE WITH <Heart size={12} fill="#FF5A2D" stroke="#FF5A2D" /> FOR LITTLE DREAMERS.
-                </p>
+
             </div>
         </footer>
     );

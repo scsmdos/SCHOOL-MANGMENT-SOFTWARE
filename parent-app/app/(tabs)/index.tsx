@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Platform, SafeAreaView, ActivityIndicator, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Platform, SafeAreaView, ActivityIndicator, Modal, Alert } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
@@ -9,8 +9,7 @@ import IDCardModal from '../../components/IDCardModal';
 import { CONFIG } from '../../constants/Config';
 import { Audio } from 'expo-av';
 import { useTheme } from '../../context/ThemeContext';
-
-const logoImg = require('../../assets/logo.jpeg');
+const logoImg = require('../../assets/logo.png');
 
 const MENU_ITEMS = [
   { id: 10, title: 'Notices', icon: 'notifications-outline', color: '#F59E0B', bgColor: '#FFF4E6', route: '/communication', params: { initialTab: 'NOTICE' } },
@@ -70,13 +69,22 @@ export default function HomeScreen() {
           'Accept': 'application/json'
         }
       });
+      
+      if (response.status === 401) {
+         // Security: Token invalidated (e.g. PIN changed)
+         await AsyncStorage.clear();
+         router.replace('/login');
+         return;
+      }
+
       const data = await response.json();
       
-      const unread = data.filter((n: any) => !n.is_read);
+      // Filter for truly "new" ones (created after last session view)
+      const lastViewed = await AsyncStorage.getItem('last_notif_viewed_at') || '0';
+      const unread = data.filter((n: any) => !n.is_read || new Date(n.created_at).getTime() > parseInt(lastViewed));
       setUnreadCount(unread.length);
 
       if (unread.length > 0) {
-        // If the newest unread ID is different from what we saw, alert!
         const newestId = unread[0].id;
         if (lastNotifId !== null && newestId > lastNotifId) {
            playNotificationSound();
@@ -111,6 +119,13 @@ export default function HomeScreen() {
             'Accept': 'application/json'
           }
         });
+
+        if (response.status === 401) {
+           await AsyncStorage.clear();
+           router.replace('/login');
+           return;
+        }
+
         const data = await response.json();
         if(!data.error) {
            setDashboardData(data);
@@ -129,17 +144,40 @@ export default function HomeScreen() {
 
   const switchStudent = async (student: any) => {
     try {
-      await AsyncStorage.setItem('selected_student_id', student.id.toString());
-      setSelectedStudentId(student.id.toString());
+      console.log('Switching to student:', student.id);
       setIsSwitcherVisible(false);
-      setDashboardData(null); // Show loading
+      setDashboardData(null); // Force loading state
+      
+      const sid = student.id.toString();
+      await AsyncStorage.setItem('selected_student_id', sid);
+      setSelectedStudentId(sid);
       
       const loginId = await AsyncStorage.getItem('parent_login_id');
-      const response = await fetch(`${BASE_URL}/parent-dashboard/${loginId}?student_id=${student.id}`);
+      const token = await AsyncStorage.getItem('parent_auth_token');
+      
+      const response = await fetch(`${BASE_URL}/parent-dashboard/${loginId}?student_id=${sid}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json'
+        }
+      });
+      
+      if (response.status === 401) {
+         await AsyncStorage.clear();
+         router.replace('/login');
+         return;
+      }
+
       const data = await response.json();
-      if(!data.error) setDashboardData(data);
+      if(!data.error) {
+        setDashboardData(data);
+        console.log('Switch complete. Student Name is now:', data.parent?.student_profile?.name);
+      } else {
+        Alert.alert('Error', 'Could not load student data.');
+      }
     } catch (e) {
       console.error('Error switching student:', e);
+      Alert.alert('Error', 'Switching failed. Please check your connection.');
     }
   };
 
@@ -201,7 +239,8 @@ export default function HomeScreen() {
       </TouchableOpacity>
     </Modal>
   );
-  const attendance = dashboardData?.attendance?.percentage || '...';
+  const attValue = dashboardData?.attendance?.percentage;
+  const attendance = (attValue !== undefined && attValue !== null) ? attValue : '...';
   const className = dashboardData?.parent?.student_profile?.class || '-';
   const section = dashboardData?.parent?.student_profile?.section || '-';
   const rollNo = dashboardData?.parent?.student_profile?.roll_no || '-';
@@ -279,7 +318,15 @@ export default function HomeScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity 
-            onPress={() => router.push('/communication')}
+            onPress={async () => {
+               await AsyncStorage.setItem('last_notif_viewed_at', Date.now().toString());
+               const loginId = await AsyncStorage.getItem('parent_login_id');
+               const token = await AsyncStorage.getItem('parent_auth_token');
+               // Optionally call mark-as-read on server
+               fetch(`${BASE_URL}/parent-notifications/read-all/${loginId}`, { method: 'PUT', headers: { 'Authorization': `Bearer ${token}` } });
+               setUnreadCount(0);
+               router.push('/communication');
+            }}
             style={styles.bellButton}
           >
             <Ionicons name="notifications-outline" size={24} color="#FFF" />

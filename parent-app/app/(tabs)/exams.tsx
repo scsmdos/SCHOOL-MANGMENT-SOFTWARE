@@ -5,6 +5,7 @@ import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../../context/ThemeContext';
+import { CONFIG } from '../../constants/Config';
 
 const POLL_INTERVAL = 30000;
 
@@ -25,8 +26,13 @@ export default function ExamsScreen() {
       }
       if (!loginIdRef.current) { setLoading(false); return; }
 
-      const response = await fetch(`http://10.32.136.136:8000/api/parent-dashboard/${loginIdRef.current}`, {
-        headers: { 'Cache-Control': 'no-cache' }
+      const token = await AsyncStorage.getItem('parent_auth_token');
+      const response = await fetch(`${CONFIG.BASE_URL}/parent-dashboard/${loginIdRef.current}`, {
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json',
+          'Cache-Control': 'no-cache' 
+        }
       });
       if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
       const json = await response.json();

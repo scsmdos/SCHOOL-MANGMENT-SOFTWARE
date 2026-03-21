@@ -42,7 +42,7 @@ const IDCardModal: React.FC<IDCardProps> = ({ isOpen, onClose, data }) => {
                 {/* Logo */}
                 <View style={styles.logoWrapper}>
                    <View style={styles.logoInner}>
-                     <Image source={require('../assets/logo.jpeg')} style={styles.logoImg} />
+                     <Image source={require('../assets/logo.png')} style={styles.logoImg} />
                    </View>
                 </View>
                 

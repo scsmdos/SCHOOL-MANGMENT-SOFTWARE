@@ -19,6 +19,7 @@ import LibraryManagement from './pages/LibraryManagement';
 import TransportManagement from './pages/TransportManagement';
 import CommunicationManagement from './pages/CommunicationManagement';
 import ParentAppManagement from './pages/ParentAppManagement';
+import TeacherAppAdmin from './pages/TeacherAppAdmin';
 
 import Login from './pages/Login';
 
@@ -89,6 +90,7 @@ function App() {
           <Route path="transport" element={<ProtectedRoute><TransportManagement /></ProtectedRoute>} />
           <Route path="communication" element={<ProtectedRoute><CommunicationManagement /></ProtectedRoute>} />
           <Route path="parent-app" element={<ProtectedRoute><ParentAppManagement /></ProtectedRoute>} />
+          <Route path="teacher-app" element={<ProtectedRoute><TeacherAppAdmin /></ProtectedRoute>} />
         </Route>
         
         {/* Global Fallback */}

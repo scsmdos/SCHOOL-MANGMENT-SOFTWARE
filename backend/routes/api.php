@@ -60,6 +60,89 @@ Route::post('/library-pdf-upload', function (Request $request) {
 });
 
 // ═══════════════════════════════════════
+// TEACHER APP API (STUDENTS & TEACHERS)
+// ═══════════════════════════════════════
+Route::post('/teacher-app/class-login', [\App\Http\Controllers\TeacherAppController::class, 'classLogin']);
+Route::post('/teacher-app/teacher-login', [\App\Http\Controllers\TeacherAppController::class, 'teacherLogin']);
+Route::get('/teacher-app/class-students/{class_name}', [\App\Http\Controllers\TeacherAppController::class, 'getStudents']);
+Route::post('/teacher-app/teacher-attendance/mark', [\App\Http\Controllers\TeacherAppController::class, 'markTeacherAttendance']);
+Route::post('/teacher-app/student-attendance/bulk', [\App\Http\Controllers\TeacherAppController::class, 'studentBulkAttendance']);
+Route::get('/teacher-app/teacher-attendance/history/{employee_id}', [\App\Http\Controllers\TeacherAppController::class, 'getTeacherHistory']);
+Route::get('/teacher-app/class-attendance/history/{class_name}', [\App\Http\Controllers\TeacherAppController::class, 'getClassHistory']);
+Route::get('/teacher-app/parent-attendance/{admission_no}', [\App\Http\Controllers\TeacherAppController::class, 'getStudentAttendance']);
+Route::post('/student-attendance/bulk', [\App\Http\Controllers\TeacherAppController::class, 'studentBulkAttendance']);
+
+// --- ADMIN CRUD FOR TEACHER APP ---
+Route::get('/class-accounts', [\App\Http\Controllers\TeacherAppController::class, 'getClassAccounts']);
+Route::post('/class-accounts', [\App\Http\Controllers\TeacherAppController::class, 'createClassAccount']);
+Route::delete('/class-accounts/{id}', [\App\Http\Controllers\TeacherAppController::class, 'deleteClassAccount']);
+
+Route::get('/teacher-accounts', [\App\Http\Controllers\TeacherAppController::class, 'getTeacherAccounts']);
+Route::post('/teacher-accounts', [\App\Http\Controllers\TeacherAppController::class, 'createTeacherAccount']);
+Route::delete('/teacher-accounts/{id}', [\App\Http\Controllers\TeacherAppController::class, 'deleteTeacherAccount']);
+
+Route::get('/teacher-attendance-logs', [\App\Http\Controllers\TeacherAppController::class, 'getAttendanceLogs']);
+
+// --- MAGIC LINK FOR NEW TABLES ---
+Route::get('/optimize-v2-teacher-app', function () {
+    try {
+        if (!Schema::hasTable('class_accounts')) {
+            Schema::create('class_accounts', function (Blueprint $table) {
+                $table->id();
+                $table->string('class_name')->nullable();
+                $table->string('login_id')->unique();
+                $table->string('pin');
+                $table->string('status')->default('Active');
+                $table->timestamps();
+            });
+        }
+        if (!Schema::hasTable('employee_attendance')) {
+            Schema::create('employee_attendance', function (Blueprint $table) {
+                $table->id();
+                $table->string('employee_id');
+                $table->string('name')->nullable();
+                $table->date('date');
+                $table->time('check_in_time')->nullable();
+                $table->time('check_out_time')->nullable();
+                $table->string('lat_in')->nullable();
+                $table->string('lng_in')->nullable();
+                $table->string('lat_out')->nullable();
+                $table->string('lng_out')->nullable();
+                $table->longText('photo_in')->nullable();
+                $table->longText('photo_out')->nullable();
+                $table->string('status')->default('Present');
+                $table->text('remarks')->nullable();
+                $table->timestamps();
+            });
+        }
+        if (!Schema::hasTable('teacher_accounts')) {
+            Schema::create('teacher_accounts', function (Blueprint $table) {
+                $table->id();
+                $table->string('employee_id')->nullable();
+                $table->string('name')->nullable();
+                $table->string('login_id')->unique();
+                $table->string('pin');
+                $table->string('status')->default('Active');
+                $table->timestamps();
+            });
+        }
+        if (!Schema::hasTable('student_attendance')) {
+            Schema::create('student_attendance', function (Blueprint $table) {
+                $table->id();
+                $table->string('student_id')->index(); // admission_no or student internal ID
+                $table->string('student_name')->nullable();
+                $table->string('class_name')->nullable();
+                $table->string('section')->default('A');
+                $table->date('attendance_date')->index();
+                $table->string('status')->default('Present'); // Present, Absent, Half-day
+                $table->text('remarks')->nullable();
+                $table->timestamps();
+            });
+        }
+        return "Success: Teacher App Tables Created!";
+    } catch (\Exception $e) { return "Error: " . $e->getMessage(); }
+});
+// ═══════════════════════════════════════
 // REAL-TIME GPS TRACKING
 // ═══════════════════════════════════════
 Route::post('/live-gps-update', function (Request $request) {
@@ -324,7 +407,11 @@ Route::middleware('auth:sanctum')->put('/parent-accounts/{id}/reset-pin', functi
     $parent = ParentAccount::find($id);
     if (!$parent) return response()->json(['message' => 'Not found'], 404);
     $parent->update(['pin' => $request->pin]);
-    return response()->json(['success' => true, 'message' => 'PIN updated successfully']);
+    
+    // Security: Log out from all devices
+    $parent->tokens()->delete();
+    
+    return response()->json(['success' => true, 'message' => 'PIN updated successfully. All active sessions have been terminated.']);
 });
 
 Route::middleware('auth:sanctum')->get('/sync-teachers', function () {
@@ -430,13 +517,13 @@ Route::post('/parent-login', function (Request $request) {
                     'name'  => $s->student_name,
                     'class' => $s->admitted_into_class,
                     'section' => $s->section ?? 'A',
-                    'photo' => $s->student_photo ? (str_starts_with($s->student_photo, 'http') ? $s->student_photo : request()->getSchemeAndHttpHost() . '/api/storage-proxy' . str_replace('/storage', '', $s->student_photo)) : null
+                    'photo' => $s->student_photo ? (str_starts_with($s->student_photo, 'http') ? $s->student_photo : url('/api/storage-proxy' . str_replace('/storage', '', $s->student_photo))) : null
                 ];
             });
 
         // Set parent_photo URL matching mobile app expectation
         $parent->parent_photo = $parent->photo_url 
-             ? (str_starts_with($parent->photo_url, 'http') ? $parent->photo_url : request()->getSchemeAndHttpHost() . '/api/storage-proxy' . str_replace('/storage', '', $parent->photo_url))
+             ? (str_starts_with($parent->photo_url, 'http') ? $parent->photo_url : url('/api/storage-proxy' . str_replace('/storage', '', $parent->photo_url)))
              : null;
 
         // Generate Token
@@ -479,11 +566,11 @@ Route::middleware('auth:sanctum')->get('/parent-dashboard/{login_id}', function 
 
         if ($admission && is_object($admission)) {
             $student_photo = isset($admission->student_photo) && $admission->student_photo
-                ? (str_starts_with($admission->student_photo, 'http') || str_starts_with($admission->student_photo, 'data:') ? $admission->student_photo : request()->getSchemeAndHttpHost() . '/api/storage-proxy' . str_replace('/storage', '', $admission->student_photo))
+                ? (str_starts_with($admission->student_photo, 'http') || str_starts_with($admission->student_photo, 'data:') ? $admission->student_photo : url('/api/storage-proxy' . str_replace('/storage', '', $admission->student_photo)))
                 : null;
-            $parentImage = $parent->relation === 'Mother' ? ($admission->mother_photo ?? null) : ($admission->father_photo ?? null);
+            $parentImage = $admission->parent_photo ?? null;
             $parent_photo = $parentImage
-                ? (str_starts_with($parentImage, 'http') || str_starts_with($parentImage, 'data:') ? $parentImage : request()->getSchemeAndHttpHost() . '/api/storage-proxy' . str_replace('/storage', '', $parentImage))
+                ? (str_starts_with($parentImage, 'http') || str_starts_with($parentImage, 'data:') ? $parentImage : url('/api/storage-proxy' . str_replace('/storage', '', $parentImage)))
                 : null;
 
             $student_profile = [
@@ -515,7 +602,11 @@ Route::middleware('auth:sanctum')->get('/parent-dashboard/{login_id}', function 
                 // For simplicity, let's filter by today or show entire week. 
                 // User said 'not showing', let's use case-insensitive class matching first.
                 $timetable = DB::table('timetables')
-                    ->where('class_name', $class_name)
+                    ->where(function($q) use ($class_name) {
+                        $q->where('class_name', $class_name)
+                          ->orWhere('class_name', strtoupper($class_name))
+                          ->orWhere('class_name', strtolower($class_name));
+                    })
                     ->orderBy('start_time', 'asc')
                     ->get()
                     ->map(function($t) {
@@ -1253,10 +1344,31 @@ Route::middleware('auth:sanctum')->group(function () {
 // ═══════════════════════════════════════
 // STUDENT ATTENDANCE — BULK MARKING (Open for Teachers)
 // ═══════════════════════════════════════
+Route::get('/student-attendance', function (Request $request) {
+    try {
+        $query = DB::table('student_attendance');
+
+        if ($request->has('student_id')) {
+            $query->where('student_id', $request->student_id);
+        }
+        if ($request->has('class_name')) {
+            $query->where('class_name', $request->class_name);
+        }
+        if ($request->has('attendance_date')) {
+            $query->where('attendance_date', $request->attendance_date);
+        }
+
+        $records = $query->orderBy('attendance_date', 'desc')->get();
+        return response()->json($records);
+    } catch (\Exception $e) {
+        return response()->json(['error' => $e->getMessage()], 500);
+    }
+});
+
 Route::post('/student-attendance/bulk', function (Request $request) {
     try {
         $date = $request->attendance_date ?: date('Y-m-d');
-        $data = $request->attendance_data; // Array of { student_id, student_name, class_name, section, status, remarks }
+        $data = $request->records ?? $request->attendance_data; 
 
         if (!is_array($data)) return response()->json(['error' => 'Invalid data format'], 400);
 
@@ -1264,7 +1376,7 @@ Route::post('/student-attendance/bulk', function (Request $request) {
         foreach ($data as $record) {
             $upsertData[] = [
                 'student_id'      => $record['student_id'],
-                'student_name'    => $record['student_name'] ?? 'Unknown',
+                'student_name'    => $record['student_name'] ?? ('Student ' . $record['student_id']),
                 'class_name'      => $record['class_name'] ?? 'N/A',
                 'section'         => $record['section'] ?? null,
                 'attendance_date' => $date,
@@ -1277,7 +1389,6 @@ Route::post('/student-attendance/bulk', function (Request $request) {
 
         if (empty($upsertData)) return response()->json(['success' => true, 'message' => 'No data to save']);
 
-        // Bulk upsert based on (student_id, attendance_date)
         DB::table('student_attendance')->upsert(
             $upsertData,
             ['student_id', 'attendance_date'],
@@ -1302,6 +1413,15 @@ Route::get('/parent-students/{login_id}', function($loginId) {
 });
 
 
+
+Route::put('/parent-notifications/read-all/{login_id}', function($loginId) {
+    // We mark notifications targeted at this parent or broadcast as read.
+    // For simplicity, we filter by created_at <= now()
+    \App\Models\ParentNotification::where(function($q) use ($loginId) {
+        $q->whereNull('recipient_login_id')->orWhere('recipient_login_id', $loginId);
+    })->update(['is_read' => 1]);
+    return response()->json(['success' => true]);
+});
 
 Route::get('/parent-notifications/{login_id}', function($loginId) {
     // Combined global notices (recipient is NULL) and direct messages for this parent
@@ -1340,6 +1460,10 @@ Route::get('/classes-list', function() {
 
 Route::get('/sections-list', function() {
     return response()->json(\App\Models\Section::pluck('name'));
+});
+
+Route::get('/teachers-list', function() {
+    return response()->json(DB::table('employees')->where('status', 'Active')->select('employee_id', 'name')->get());
 });
 
 

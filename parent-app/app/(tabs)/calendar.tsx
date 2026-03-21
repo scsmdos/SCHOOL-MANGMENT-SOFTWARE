@@ -5,6 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../../context/ThemeContext';
+import { CONFIG } from '../../constants/Config';
 
 export default function CalendarScreen() {
   const { theme, isDark } = useTheme();
@@ -12,16 +13,22 @@ export default function CalendarScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const BASE_URL = 'http://10.32.136.136:8000/api';
+
 
   const fetchEvents = useCallback(async () => {
     try {
       const loginId = await AsyncStorage.getItem('parent_login_id');
+      const token = await AsyncStorage.getItem('parent_auth_token');
       if (!loginId) return;
 
-      const response = await fetch(`${BASE_URL}/parent-dashboard/${loginId}`);
+      const response = await fetch(`${CONFIG.BASE_URL}/parent-dashboard/${loginId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json'
+        }
+      });
       const data = await response.json();
-      setEvents(data.parentEvents || []);
+      setEvents(data.parent_events || data.parentEvents || []);
     } catch (error) {
       console.error('Fetch error:', error);
     } finally {

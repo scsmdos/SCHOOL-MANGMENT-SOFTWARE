@@ -6,8 +6,8 @@ import toast from 'react-hot-toast';
 import logoImg from '../assets/logo.png'; 
 
 const Login = () => {
-    const [email, setEmail] = useState('littleseeds@gmail.com');
-    const [password, setPassword] = useState('Patna@2026');
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
@@ -110,11 +110,14 @@ const Login = () => {
                                 </div>
                                 <input 
                                     type="email"
+                                    id="email"
+                                    name="email"
+                                    autoComplete="username"
                                     required
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
                                     className="w-full h-[42px] pl-9 pr-4 bg-[#F5F8FF] border-none rounded-xl text-[12px] font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#6366F1]/10 transition-all font-sans"
-                                    placeholder="littleseeds@gmail.com"
+                                    placeholder="admin@example.com"
                                 />
                             </div>
                         </div>
@@ -127,6 +130,9 @@ const Login = () => {
                                 </div>
                                 <input 
                                     type={showPassword ? 'text' : 'password'}
+                                    id="password"
+                                    name="password"
+                                    autoComplete="current-password"
                                     required
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}

@@ -87,18 +87,13 @@ const Header = () => {
 
                 {/* Desktop Buttons */}
                 <div className="hidden lg:flex items-center space-x-4">
-                    <button
-                        onClick={() => navigate('/admin/login')}
-                        className="px-5 py-2 border border-[#FF5A2D] text-[#FF5A2D] rounded-[4px] text-[12px] font-semibold tracking-widest hover:bg-[#FF5A2D] hover:text-white transition-all"
+                    <a
+                        href="/parent-app.apk"
+                        download="parent-app.apk"
+                        className="px-5 py-2 border border-[#FF5A2D] text-[#FF5A2D] rounded-[4px] text-[12px] font-semibold tracking-widest hover:bg-[#FF5A2D] hover:text-white transition-all text-center inline-block"
                     >
-                        PARENT LOGIN
-                    </button>
-                    <button
-                        onClick={() => navigate('/admin/login')}
-                        className="px-5 py-[9px] bg-[#091E3E] text-white rounded-[4px] text-[12px] font-semibold tracking-widest hover:bg-[#0C2A54] transition-all"
-                    >
-                        TEACHER LOGIN
-                    </button>
+                        DOWNLOAD PARENT APP
+                    </a>
                 </div>
 
                 {/* Mobile Menu Toggle */}
@@ -123,18 +118,14 @@ const Header = () => {
                         <NavLink label="CONTACT" to="/contact" active={location.pathname === '/contact'} />
 
                         <div className="pt-6 border-t border-slate-100 flex flex-col space-y-4">
-                            <button
-                                onClick={() => { navigate('/admin/login'); setIsMenuOpen(false); }}
-                                className="w-full py-3 border border-[#FF5A2D] text-[#FF5A2D] rounded-[4px] text-[12px] font-bold tracking-widest"
+                            <a
+                                href="/parent-app.apk"
+                                download="parent-app.apk"
+                                onClick={() => setIsMenuOpen(false)}
+                                className="w-full block text-center py-3 border border-[#FF5A2D] text-[#FF5A2D] rounded-[4px] text-[12px] font-bold tracking-widest"
                             >
-                                PARENT LOGIN
-                            </button>
-                            <button
-                                onClick={() => { navigate('/admin/login'); setIsMenuOpen(false); }}
-                                className="w-full py-3 bg-[#091E3E] text-white rounded-[4px] text-[12px] font-bold tracking-widest"
-                            >
-                                TEACHER LOGIN
-                            </button>
+                                DOWNLOAD PARENT APP
+                            </a>
                         </div>
                     </div>
                 </div>

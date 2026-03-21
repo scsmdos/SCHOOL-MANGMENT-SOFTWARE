@@ -5,6 +5,7 @@ import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../../context/ThemeContext';
+import { CONFIG } from '../../constants/Config';
 
 export default function TimetableScreen() {
   const { theme, isDark } = useTheme();
@@ -15,9 +16,18 @@ export default function TimetableScreen() {
     const fetchTimetable = async () => {
       try {
         const loginId = await AsyncStorage.getItem('parent_login_id');
+        const token = await AsyncStorage.getItem('parent_auth_token');
+        const sid = await AsyncStorage.getItem('selected_student_id');
+        
         if (!loginId) { setLoading(false); return; }
 
-        const response = await fetch(`http://10.32.136.136:8000/api/parent-dashboard/${loginId}`);
+        const url = `${CONFIG.BASE_URL}/parent-dashboard/${loginId}${sid ? `?student_id=${sid}` : ''}`;
+        const response = await fetch(url, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Accept': 'application/json'
+          }
+        });
         const json = await response.json();
         setSchedule(json.timetable || []);
       } catch (err) {

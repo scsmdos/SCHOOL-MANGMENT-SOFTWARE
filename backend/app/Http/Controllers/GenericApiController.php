@@ -234,30 +234,33 @@ class GenericApiController extends Controller
                             if (!empty($item->parent_email)) {
                                 $pin = $tempPin ?? (string)rand(1000, 9999);
                                 try {
-                                    $html = "
-                                    <div style='font-family: sans-serif; color: #333; max-width: 600px; margin: auto; border: 1px solid #eee; padding: 20px; border-radius: 10px;'>
-                                        <div style='text-align: center; margin-bottom: 20px;'>
-                                            <img src='https://littleseeds.org.in/logo.png' alt='School Logo' style='height: 60px;' />
-                                        </div>
-                                        <h2 style='color: #0ea5e9; text-align: center;'>Welcome to Little Seeds School!</h2>
-                                        <p>Dear Parent,</p>
-                                        <p>Congratulations! Your child <strong>{$item->student_name}</strong>'s admission has been approved successfully.</p>
-                                        <p>You can now access the <strong>Parent Mobile App</strong> to track your child's progress, attendance, and fees.</p>
-                                        <div style='background: #f0f9ff; padding: 15px; border-radius: 8px; margin: 20px 0;'>
-                                            <p style='margin: 0;'><strong>Your Login Credentials:</strong></p>
-                                            <p style='margin: 5px 0;'>User ID: <span style='color: #0369a1; font-weight: bold;'>$login_id</span></p>
-                                            <p style='margin: 5px 0;'>Initial PIN: <span style='color: #0369a1; font-weight: bold;'>$pin</span></p>
-                                        </div>
-                                        <p>For security reasons, please change your PIN after first login.</p>
-                                        <p style='font-size: 12px; color: #666; margin-top: 30px; border-t: 1px solid #eee; padding-top: 10px;'>
-                                            Best Regards,<br/><strong>Little Seeds School Administration</strong><br/>
-                                            Contact: info@littleseeds.org.in
-                                        </p>
-                                    </div>";
+                                   $logoUrl = url('/logo.png'); // Points to public/logo.png in backend
+                                   $html = "
+                                   <div style='font-family: sans-serif; color: #333; max-width: 600px; margin: auto; border: 1px solid #eee; padding: 20px; border-radius: 10px;'>
+                                       <div style='text-align: center; margin-bottom: 20px;'>
+                                           <img src='{$logoUrl}' alt='School Logo' style='height: 70px; object-fit: contain;' />
+                                       </div>
+                                       <h2 style='color: #65a30d; text-align: center;'>Welcome to Little Seeds School!</h2>
+                                       <p>Dear Parent,</p>
+                                       <p>Congratulations! Your child <strong>{$item->student_name}</strong>'s admission has been approved successfully.</p>
+                                       <p>You can now access the <strong>Parent Mobile App</strong> to track your child's progress, attendance, and fees.</p>
+                                       <div style='background: #f7fee7; padding: 15px; border: 1px solid #d9f99d; border-radius: 8px; margin: 20px 0;'>
+                                           <p style='margin: 0; color: #3f6212; font-weight: bold;'>Your Login Credentials:</p>
+                                           <div style='margin-top: 10px; padding: 10px; background: white; border-radius: 5px;'>
+                                              <p style='margin: 5px 0;'><strong>App ID (Login ID):</strong> <span style='color: #65a30d; font-family: monospace; font-size: 16px;'>$login_id</span></p>
+                                              <p style='margin: 5px 0;'><strong>Parent App PIN:</strong> <span style='color: #65a30d; font-family: monospace; font-size: 16px;'>$pin</span></p>
+                                           </div>
+                                       </div>
+                                       <p>For security reasons, please change your PIN after your first login within the app profile section.</p>
+                                       <p style='font-size: 12px; color: #666; margin-top: 30px; border-top: 1px solid #eee; padding-top: 10px;'>
+                                           Best Regards,<br/><strong>Little Seeds School Administration</strong><br/>
+                                           Contact: info@littleseeds.org.in
+                                       </p>
+                                   </div>";
 
                                     Mail::send([], [], function($message) use ($item, $html) {
                                         $message->to($item->parent_email)
-                                                ->subject('Welcome to Little Seeds School - Parent App Credentials')
+                                                ->subject('Welcome to Little Seeds School - Parent App Access')
                                                 ->from(config('mail.from.address'), config('mail.from.name'))
                                                 ->html($html);
                                     });
@@ -320,6 +323,17 @@ class GenericApiController extends Controller
 
             $item->update($data);
 
+            // ── SECURITY: LOGOUT ALL DEVICES IF PIN IS CHANGED ──
+            if ($resource === 'parent-accounts' && isset($data['pin'])) {
+                try {
+                    if (method_exists($item, 'tokens')) {
+                        $item->tokens()->delete();
+                    }
+                } catch (\Exception $eTok) {
+                    \Illuminate\Support\Facades\Log::error("Failed to clear parent tokens on PIN change: " . $eTok->getMessage());
+                }
+            }
+
             // ── AUTO-CREATE PARENT ACCOUNT WHEN ADMISSION IS APPROVED ──
             if ($resource === 'admissions' && isset($item->status) && $item->status === 'Approved') {
                 try {
@@ -343,30 +357,33 @@ class GenericApiController extends Controller
                             if (!empty($item->parent_email)) {
                                 $pin = $tempPin ?? (string)rand(1000, 9999);
                                 try {
-                                    $html = "
-                                    <div style='font-family: sans-serif; color: #333; max-width: 600px; margin: auto; border: 1px solid #eee; padding: 20px; border-radius: 10px;'>
-                                        <div style='text-align: center; margin-bottom: 20px;'>
-                                            <img src='https://littleseeds.org.in/logo.png' alt='School Logo' style='height: 60px;' />
-                                        </div>
-                                        <h2 style='color: #0ea5e9; text-align: center;'>Welcome to Little Seeds School!</h2>
-                                        <p>Dear Parent,</p>
-                                        <p>Congratulations! Your child <strong>{$item->student_name}</strong>'s admission has been approved successfully.</p>
-                                        <p>You can now access the <strong>Parent Mobile App</strong> to track your child's progress, attendance, and fees.</p>
-                                        <div style='background: #f0f9ff; padding: 15px; border-radius: 8px; margin: 20px 0;'>
-                                            <p style='margin: 0;'><strong>Your Login Credentials:</strong></p>
-                                            <p style='margin: 5px 0;'>User ID: <span style='color: #0369a1; font-weight: bold;'>$login_id</span></p>
-                                            <p style='margin: 5px 0;'>Initial PIN: <span style='color: #0369a1; font-weight: bold;'>$pin</span></p>
-                                        </div>
-                                        <p>For security reasons, please change your PIN after first login.</p>
-                                        <p style='font-size: 12px; color: #666; margin-top: 30px; border-t: 1px solid #eee; padding-top: 10px;'>
-                                            Best Regards,<br/><strong>Little Seeds School Administration</strong><br/>
-                                            Contact: info@littleseeds.org.in
-                                        </p>
-                                    </div>";
+                                   $logoUrl = url('/logo.png');
+                                   $html = "
+                                   <div style='font-family: sans-serif; color: #333; max-width: 600px; margin: auto; border: 1px solid #eee; padding: 20px; border-radius: 10px;'>
+                                       <div style='text-align: center; margin-bottom: 20px;'>
+                                           <img src='{$logoUrl}' alt='School Logo' style='height: 70px; object-fit: contain;' />
+                                       </div>
+                                       <h2 style='color: #65a30d; text-align: center;'>Welcome to Little Seeds School!</h2>
+                                       <p>Dear Parent,</p>
+                                       <p>Congratulations! Your child <strong>{$item->student_name}</strong>'s admission has been approved successfully.</p>
+                                       <p>You can now access the <strong>Parent Mobile App</strong> to track your child's progress, attendance, and fees.</p>
+                                       <div style='background: #f7fee7; padding: 15px; border: 1px solid #d9f99d; border-radius: 8px; margin: 20px 0;'>
+                                           <p style='margin: 0; color: #3f6212; font-weight: bold;'>Your Login Credentials:</p>
+                                           <div style='margin-top: 10px; padding: 10px; background: white; border-radius: 5px;'>
+                                              <p style='margin: 5px 0;'><strong>App ID (Login ID):</strong> <span style='color: #65a30d; font-family: monospace; font-size: 16px;'>$login_id</span></p>
+                                              <p style='margin: 5px 0;'><strong>Parent App PIN:</strong> <span style='color: #65a30d; font-family: monospace; font-size: 16px;'>$pin</span></p>
+                                           </div>
+                                       </div>
+                                       <p>For security reasons, please change your PIN after your first login within the app profile section.</p>
+                                       <p style='font-size: 12px; color: #666; margin-top: 30px; border-top: 1px solid #eee; padding-top: 10px;'>
+                                           Best Regards,<br/><strong>Little Seeds School Administration</strong><br/>
+                                           Contact: info@littleseeds.org.in
+                                       </p>
+                                   </div>";
 
                                     Mail::send([], [], function($message) use ($item, $html) {
                                         $message->to($item->parent_email)
-                                                ->subject('Welcome to Little Seeds School - Parent App Credentials')
+                                                ->subject('Welcome to Little Seeds School - Parent App Access')
                                                 ->from(config('mail.from.address'), config('mail.from.name'))
                                                 ->html($html);
                                     });

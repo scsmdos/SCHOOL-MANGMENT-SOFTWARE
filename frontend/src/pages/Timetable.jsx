@@ -3,7 +3,6 @@ import {
   Grid, UserCheck, Clock, ShieldCheck, Plus, X, Save,
   Download, Settings, ChevronDown, Edit, Trash2, AlertTriangle, RefreshCw
 } from 'lucide-react';
-import { useCallback } from 'react';
 import api from '../api/axios';
 
 /* ══════════════════════════════════════════
@@ -289,7 +288,7 @@ const Timetable = () => {
   const [selectedClass, setSelectedClass] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('');
   const [slots, setSlots]                 = useState({});
-  const [loading, setLoading]             = useState(true);
+  const [loading, setLoading]             = useState(false);
   const [ready, setReady]                 = useState(false);
   const [modal, setModal]                 = useState({ open: false, key: null, context: '', periodId: null, day: null });
   const [showConfig, setShowConfig]       = useState(false);
@@ -333,7 +332,10 @@ const Timetable = () => {
 
 
   const fetchTimetable = useCallback(async () => {
-    if (!ready || (activeTab === 'class' && !selectedClass)) return;
+    if (!ready || (activeTab === 'class' && !selectedClass)) {
+       setLoading(false);
+       return;
+    }
     setLoading(true);
     try {
       const url = activeTab === 'class' 

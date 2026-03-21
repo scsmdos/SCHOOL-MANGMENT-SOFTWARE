@@ -1,12 +1,14 @@
 import React, { useRef } from 'react';
 import { X, Download } from 'lucide-react';
 import html2canvas from 'html2canvas';
+import logoImg from '../assets/logo.jpeg';
 
 const getPhotoSrc = (url, fallbackText) => {
   if (!url) return `https://placehold.co/150x150/1e293b/a2a9b5?text=${fallbackText}`;
   if (url.startsWith('http')) return url;
-  const baseUrl = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:8000';
-  return `${baseUrl}${url}`;
+  const baseUrl = import.meta.env.VITE_API_URL?.split('/api')[0] || 'http://localhost:8000';
+  const cleanUrl = url.startsWith('/') ? url : `/${url}`;
+  return `${baseUrl}${cleanUrl}`;
 };
 
 const IDCardModal = ({ isOpen, onClose, data }) => {
@@ -67,7 +69,7 @@ const IDCardModal = ({ isOpen, onClose, data }) => {
             <div className="h-[210px] bg-[#236b2b] relative overflow-hidden flex flex-col items-center pt-6">
                <div className="w-[68px] h-[68px] bg-white rounded-full p-1 flex items-center justify-center mb-3 shadow-md z-20 border-[1.5px] border-[#eab308]">
                   <div className="w-full h-full rounded-full overflow-hidden flex items-center justify-center bg-white">
-                    <img src="/src/assets/logo.jpeg" alt="Logo" className="w-[85%] h-[85%] object-contain" />
+                    <img src={logoImg} alt="Logo" className="w-[85%] h-[85%] object-contain" />
                   </div>
                </div>
                
